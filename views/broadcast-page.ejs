@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Broadcast | Alexa AI</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:"Segoe UI",sans-serif;
+}
+
+body{
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    background:
+    radial-gradient(circle at top left,#1a1a1a,#050505 60%);
+    color:white;
+    padding:20px;
+}
+
+.box{
+    width:100%;
+    max-width:550px;
+    background:rgba(20,20,20,.95);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:20px;
+    padding:35px;
+    backdrop-filter:blur(15px);
+    box-shadow:
+    0 0 30px rgba(0,0,0,.6),
+    inset 0 0 20px rgba(255,255,255,.02);
+}
+
+.badge{
+    display:inline-block;
+    padding:6px 14px;
+    border-radius:20px;
+    background:#111;
+    border:1px solid #333;
+    color:#ddd;
+    font-size:12px;
+    margin-bottom:15px;
+}
+
+h2{
+    margin-bottom:10px;
+    font-size:28px;
+}
+
+.subtitle{
+    color:#aaa;
+    margin-bottom:25px;
+    line-height:1.5;
+}
+
+input,
+textarea{
+    width:100%;
+    padding:14px;
+    background:#0f0f0f;
+    border:1px solid #222;
+    border-radius:12px;
+    color:white;
+    outline:none;
+    margin-bottom:15px;
+    transition:.3s;
+}
+
+input:focus,
+textarea:focus{
+    border-color:#888;
+    box-shadow:0 0 15px rgba(255,255,255,.15);
+}
+
+textarea{
+    resize:vertical;
+    min-height:140px;
+}
+
+button{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:12px;
+    background:linear-gradient(135deg,#ffffff,#9c9c9c);
+    color:black;
+    font-weight:700;
+    cursor:pointer;
+    transition:.3s;
+}
+
+button:hover{
+    transform:translateY(-2px);
+}
+
+#status{
+    margin-top:15px;
+    text-align:center;
+    font-weight:600;
+    color:#bbb;
+}
+
+.footer{
+    margin-top:20px;
+    text-align:center;
+    color:#666;
+    font-size:12px;
+}
+</style>
+</head>
+<body>
+
+<div class="box">
+
+    <div class="badge">
+        ALEXA AI BROADCAST CENTER
+    </div>
+
+    <h2>Broadcast Message</h2>
+
+    <p class="subtitle">
+        Send messages directly through Alexa AI to any connected WhatsApp recipient.
+    </p>
+
+    <form id="broadcastForm">
+
+        <input
+            type="text"
+            id="target"
+            placeholder="23480xxxxxxxx@c.us"
+            required
+        >
+
+        <textarea
+            id="message"
+            placeholder="Enter your broadcast message..."
+            required
+        ></textarea>
+
+        <button
+            type="button"
+            onclick="sendBroadcast()"
+        >
+            Send Broadcast
+        </button>
+
+    </form>
+
+    <p id="status"></p>
+
+    <div class="footer">
+        Alexa AI • Intelligent Communication System
+    </div>
+
+</div>
+
+<script>
+async function sendBroadcast() {
+
+    const target = document.getElementById('target').value;
+    const message = document.getElementById('message').value;
+    const status = document.getElementById('status');
+
+    status.innerText = "Sending broadcast...";
+
+    try {
+
+        const res = await fetch('/api/broadcast', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                target,
+                message
+            })
+        });
+
+        if (res.ok) {
+            status.innerText = "✓ Broadcast successful";
+        } else {
+            status.innerText = "✗ Failed to broadcast";
+        }
+
+    } catch (err) {
+        status.innerText = "✗ Connection error";
+    }
+}
+</script>
+
+</body>
+</html>
