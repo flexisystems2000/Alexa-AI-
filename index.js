@@ -1,31 +1,32 @@
 const { Client, RemoteAuth } = require('whatsapp-web.js');
 const admin = require('firebase-admin');
 const express = require('express');
+const session = require('express-session');
 const { routeCommand } = require('./commandRouter');
 
-// Initialize Express
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Initialize Firebase (Ensure FIREBASE_CONFIG env var is set)
+// Middleware for parsing form data
+app.use(express.urlencoded({ extended: true }));
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'alexa-secret-key',
+    resave: false,
+    saveUninitialized: true
+}));
+
+// Firebase & WhatsApp Initialization
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 
-// 1. WhatsApp Client Setup
 const client = new Client({
     authStrategy: new RemoteAuth({ 
         store: new (require('wwebjs-firestore'))({ db: db }),
         backupSyncIntervalMs: 300000 
     }),
-    // Pairing code setup
     pairWithPhoneNumber: true,
-    // Essential for cloud stability
-    puppeteer: { 
-        headless: true, 
-        args: ['--no-sandbox', '--disable-setuid-sandbox'] 
-    },
-    // Browser identity to mimic a real desktop device
+    puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] },
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     webVersionCache: {
         type: 'remote',
@@ -33,42 +34,48 @@ const client = new Client({
     }
 });
 
-// 2. Event Listeners
-client.on('ready', () => console.log('Alexa AI is ready and connected!'));
+// Authentication Middleware
+const isAuthenticated = (req, res, next) => {
+    if (req.session.isLoggedIn) next();
+    else res.redirect('/login');
+};
 
-client.on('message', async (msg) => {
-    // This is the core 'message' event, equivalent to how you process 
-    // incoming traffic in whatsapp-web.js
-    if (msg.body.startsWith('!')) {
-        const parts = msg.body.slice(1).trim().split(/ +/);
-        const command = parts[0].toLowerCase();
-        const args = parts.slice(1);
-        
-        // Pass to your central command router
-        await routeCommand(command, args, msg);
-    }
-});
-
-client.initialize();
-
-// 3. Web Dashboard (Express)
+// Routes
 app.set('view engine', 'ejs');
 app.use(express.static('public'));
 
-app.get('/', (req, res) => {
-    res.render('index', { 
-        year: new Date().getFullYear(), 
-        contact: "09034159839" 
-    });
+app.get('/login', (req, res) => res.render('login'));
+app.post('/login', (req, res) => {
+    if (req.body.password === process.env.ADMIN_PASSWORD) {
+        req.session.isLoggedIn = true;
+        res.redirect('/');
+    } else {
+        res.status(401).send('Invalid Password');
+    }
 });
 
-// Endpoint to trigger pairing code via web
-app.get('/api/pair', async (req, res) => {
+// Protected Dashboard Routes
+app.get('/', isAuthenticated, (req, res) => res.render('index', { year: new Date().getFullYear(), contact: "09034159839" }));
+app.get('/pair', isAuthenticated, (req, res) => res.render('pairing-page'));
+app.get('/broadcast', isAuthenticated, (req, res) => res.render('broadcast-page'));
+app.get('/logs', isAuthenticated, (req, res) => res.render('logs-page'));
+app.get('/chat', isAuthenticated, (req, res) => res.render('chat-page'));
+
+// API Endpoint
+app.get('/api/pair', isAuthenticated, async (req, res) => {
     const phoneNumber = req.query.phone;
-    if (!phoneNumber) return res.status(400).send('Phone number required');
-    
+    if (!phoneNumber) return res.status(400).json({ error: 'Phone number required' });
     const code = await client.requestPairingCode(phoneNumber);
     res.json({ pairingCode: code });
 });
 
-app.listen(port, () => console.log(`Dashboard running on port ${port}`));
+// Bot Events
+client.on('message', async (msg) => {
+    if (msg.body.startsWith('!')) {
+        const parts = msg.body.slice(1).trim().split(/ +/);
+        await routeCommand(parts[0].toLowerCase(), parts.slice(1), msg);
+    }
+});
+
+client.initialize();
+app.listen(port, () => console.log(`Dashboard active on port ${port}`));
