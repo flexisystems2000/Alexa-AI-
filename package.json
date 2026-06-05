@@ -1,7 +1,7 @@
 {
   "name": "alexa-ai",
   "version": "1.0.0",
-  "description": "WhatsApp AI Assistant powered by Flexi-AI and Firebase",
+  "description": "Alexa AI WhatsApp Assistant with Web Dashboard",
   "main": "index.js",
   "engines": {
     "node": ">=18.0.0"
@@ -10,10 +10,12 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.26.0",
-    "firebase-admin": "^12.0.0",
-    "axios": "^1.7.0",
-    "qrcode-terminal": "^0.12.0",
-    "puppeteer": "^22.0.0"
+    "whatsapp-web.js": "^1.34.7",
+    "firebase-admin": "^13.0.0",
+    "axios": "^1.7.9",
+    "puppeteer": "^24.0.0",
+    "express": "^4.21.2",
+    "ejs": "^3.1.10",
+    "qrcode-terminal": "^0.12.0"
   }
 }
