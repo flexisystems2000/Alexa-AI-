@@ -1,0 +1,19 @@
+{
+  "name": "alexa-ai",
+  "version": "1.0.0",
+  "description": "WhatsApp AI Assistant powered by Flexi-AI and Firebase",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.26.0",
+    "firebase-admin": "^12.0.0",
+    "axios": "^1.7.0",
+    "qrcode-terminal": "^0.12.0",
+    "puppeteer": "^22.0.0"
+  }
+}
