@@ -85,13 +85,82 @@ app.post('/api/chat', isAuthenticated, async (req, res) => {
 });
 
 // Bot Logic
+    const {
+    activeQuiz,
+    scores,
+    saveScores
+} = require('./commandRouter');
+
 client.on('message', async (msg) => {
-    if (msg.body.startsWith('!')) {
-        const parts = msg.body.slice(1).trim().split(/ +/);
-        await routeCommand(parts[0].toLowerCase(), parts.slice(1), msg);
+
+    const groupQuiz =
+        activeQuiz[msg.from];
+
+    if (
+        groupQuiz &&
+        !groupQuiz.answered
+    ) {
+
+        const answer =
+            msg.body
+                .trim()
+                .toUpperCase();
+
+        if (
+            ['A','B','C','D']
+            .includes(answer)
+        ) {
+
+            if (
+                answer ===
+                groupQuiz.answer
+            ) {
+
+                groupQuiz.answered = true;
+
+                const user =
+                    msg.author ||
+                    msg.from;
+
+                scores[user] =
+                    (
+                        scores[user]
+                        || 0
+                    ) + 1;
+
+                saveScores();
+
+                await msg.reply(
+                    `🏆 Correct!\n\n+1 Point\n\nTotal Score: ${scores[user]}`
+                );
+
+                delete activeQuiz[
+                    msg.from
+                ];
+
+                return;
+            }
+        }
+    }
+
+    if (
+        msg.body.startsWith('!')
+    ) {
+
+        const parts =
+            msg.body
+                .slice(1)
+                .trim()
+                .split(/ +/);
+
+        await routeCommand(
+            parts[0].toLowerCase(),
+            parts.slice(1),
+            msg,
+            client
+        );
     }
 });
-
 client.initialize();
 app.listen(port, () => console.log(`Dashboard active on port ${port}`));
         
