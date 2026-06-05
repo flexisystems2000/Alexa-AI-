@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pairing | Alexa AI</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; padding-top: 50px; background: #f4f4f9; }
+        .box { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 300px; text-align: center; }
+        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        #codeDisplay { margin-top: 20px; font-weight: bold; font-size: 1.2rem; color: #333; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>Pair Alexa AI</h2>
+    <p>Enter your phone number (with country code, e.g., 23480...)</p>
+    <input type="text" id="phone" placeholder="23480xxxxxxxx">
+    <button onclick="requestPairing()">Generate Code</button>
+    <div id="codeDisplay">---</div>
+</div>
+
+<script>
+    async function requestPairing() {
+        const phone = document.getElementById('phone').value;
+        const display = document.getElementById('codeDisplay');
+        display.innerText = "Generating...";
+        
+        try {
+            const res = await fetch(`/api/pair?phone=${phone}`);
+            const data = await res.json();
+            if (data.pairingCode) {
+                display.innerText = `Code: ${data.pairingCode}`;
+            } else {
+                display.innerText = "Error generating code.";
+            }
+        } catch (err) {
+            display.innerText = "Failed to connect to server.";
+        }
+    }
+</script>
+
+</body>
+</html>
