@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Alexa AI Dashboard</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header class="squared-header">
+        <h1>Welcome to Alexa AI Platform</h1>
+    </header>
+
+    <div class="card-container">
+        <a href="/pair" class="card">
+            <h3>Pair with Alexa AI</h3>
+            <p>Connect your WhatsApp instance via pairing code.</p>
+        </a>
+        <a href="/broadcast" class="card">
+            <h3>Broadcast with Alexa</h3>
+            <p>Analyze data and carry out mass communication.</p>
+        </a>
+        <a href="/logs" class="card">
+            <h3>View Alexa Logs</h3>
+            <p>Monitor real-time system activity.</p>
+        </a>
+        <a href="/chat" class="card">
+            <h3>Chat with Alexa AI</h3>
+            <p>Direct interaction with the AI brain.</p>
+        </a>
+        <a href="tel:09034159839" class="card">
+            <h3>Contact Us</h3>
+            <p>Support Line: <%= contact %></p>
+        </a>
+    </div>
+
+    <footer>
+        © <%= new Date().getFullYear() %> Alexa AI | All rights reserved.
+    </footer>
+</body>
+</html>
