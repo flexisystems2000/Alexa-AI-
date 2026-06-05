@@ -7,8 +7,9 @@ const { routeCommand } = require('./commandRouter');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware for parsing form data
+// Middleware
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json()); // Required for Broadcast and Chat JSON data
 app.use(session({
     secret: process.env.SESSION_SECRET || 'alexa-secret-key',
     resave: false,
@@ -34,7 +35,7 @@ const client = new Client({
     }
 });
 
-// Authentication Middleware
+// Auth Middleware
 const isAuthenticated = (req, res, next) => {
     if (req.session.isLoggedIn) next();
     else res.redirect('/login');
@@ -54,22 +55,37 @@ app.post('/login', (req, res) => {
     }
 });
 
-// Protected Dashboard Routes
+// Protected Dashboard Views
 app.get('/', isAuthenticated, (req, res) => res.render('index', { year: new Date().getFullYear(), contact: "09034159839" }));
 app.get('/pair', isAuthenticated, (req, res) => res.render('pairing-page'));
 app.get('/broadcast', isAuthenticated, (req, res) => res.render('broadcast-page'));
 app.get('/logs', isAuthenticated, (req, res) => res.render('logs-page'));
 app.get('/chat', isAuthenticated, (req, res) => res.render('chat-page'));
 
-// API Endpoint
+// API Endpoints
 app.get('/api/pair', isAuthenticated, async (req, res) => {
-    const phoneNumber = req.query.phone;
-    if (!phoneNumber) return res.status(400).json({ error: 'Phone number required' });
-    const code = await client.requestPairingCode(phoneNumber);
+    const code = await client.requestPairingCode(req.query.phone);
     res.json({ pairingCode: code });
 });
 
-// Bot Events
+app.post('/api/broadcast', isAuthenticated, async (req, res) => {
+    const { target, message } = req.body;
+    await client.sendMessage(target, message);
+    res.json({ success: true });
+});
+
+app.post('/api/chat', isAuthenticated, async (req, res) => {
+    const { message } = req.body;
+    // Mocking the message object so the bot thinks it came from WhatsApp
+    const mockMsg = {
+        body: `!ai ${message}`,
+        reply: (txt) => res.json({ response: txt }),
+        getChat: async () => ({ sendStateTyping: () => {} })
+    };
+    await routeCommand('ai', [message], mockMsg);
+});
+
+// Bot Logic
 client.on('message', async (msg) => {
     if (msg.body.startsWith('!')) {
         const parts = msg.body.slice(1).trim().split(/ +/);
@@ -79,3 +95,4 @@ client.on('message', async (msg) => {
 
 client.initialize();
 app.listen(port, () => console.log(`Dashboard active on port ${port}`));
+        
