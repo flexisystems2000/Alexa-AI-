@@ -16,8 +16,8 @@
     "puppeteer": "^24.0.0",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
-    "wwebjs-firestore": "^1.1.0",
     "ejs": "^3.1.10",
-    "qrcode-terminal": "^0.12.0"
+    "qrcode-terminal": "^0.12.0",
+    "wwebjs-firebase-store": "github:wppconnect-team/wwebjs-firebase-store"
   }
 }
