@@ -1,4 +1,4 @@
-const { Client, RemoteAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js'); // Changed to LocalAuth
 const admin = require('firebase-admin');
 const express = require('express');
 const session = require('express-session');
@@ -7,34 +7,32 @@ const { routeCommand } = require('./commandRouter');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json()); // Required for Broadcast and Chat JSON data
+app.use(express.json());
 app.use(session({
     secret: process.env.SESSION_SECRET || 'alexa-secret-key',
     resave: false,
     saveUninitialized: true
 }));
 
-// Firebase & WhatsApp Initialization
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 
+// Implementation of LocalAuth for stable session management
 const client = new Client({
-    authStrategy: new RemoteAuth({ 
-        store: new (require('wwebjs-firebase-store'))({ db: db }),
-        backupSyncIntervalMs: 300000 
+    authStrategy: new LocalAuth({ 
+        dataPath: '.wwebjs_auth' 
     }),
-    pairWithPhoneNumber: true,
-    puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] },
+    puppeteer: { 
+        headless: true, 
+        args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+    },
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     webVersionCache: {
         type: 'remote',
         remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1014164801.html',
-    }
-});
-
+        }
 // Auth Middleware
 const isAuthenticated = (req, res, next) => {
     if (req.session.isLoggedIn) next();
