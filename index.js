@@ -23,7 +23,7 @@ const db = admin.firestore();
 
 const client = new Client({
     authStrategy: new RemoteAuth({ 
-        store: new (require('wwebjs-firestore'))({ db: db }),
+        store: new (require('wwebjs-firebase-store'))({ db: db }),
         backupSyncIntervalMs: 300000 
     }),
     pairWithPhoneNumber: true,
