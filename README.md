@@ -51,7 +51,7 @@ Alexa AI is a premium, cloud-based WhatsApp assistant engineered to redefine how
 * **Automated Welcome/Goodbye:** Professional, customizable greetings for new members and farewell notifications for those exiting.
 ---
 ## ⚙️ Setup & Deployment
-1. **Clone the Repo:** `git clone https://github.com/YOUR_USERNAME/alexa-ai.git`
+1. **Clone the Repo:** `git clone https://github.com/flexisystems2000/alexa-ai.git`
 2. **Install Dependencies:** Run `npm install` in your terminal.
 3. **Configure Environment:** Create a `.env` file containing:
    - `FIREBASE_SERVICE_ACCOUNT`: Your Firebase configuration key.
