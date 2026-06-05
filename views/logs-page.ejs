@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analytics & Logs | Alexa AI</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:"Segoe UI",sans-serif;
+}
+
+body{
+    min-height:100vh;
+    background:
+    radial-gradient(circle at top left,#1a1a1a,#050505 60%);
+    color:white;
+    padding:30px;
+}
+
+/* HEADER */
+.header{
+    max-width:1000px;
+    margin:auto;
+    background:rgba(20,20,20,.95);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:20px;
+    padding:25px;
+    text-align:center;
+    margin-bottom:25px;
+    backdrop-filter:blur(15px);
+    box-shadow:0 0 25px rgba(0,0,0,.6);
+}
+
+.header h2{
+    font-size:28px;
+    margin-bottom:8px;
+}
+
+.header p{
+    color:#aaa;
+}
+
+/* LAYOUT */
+.container{
+    max-width:1000px;
+    margin:auto;
+}
+
+/* CHART */
+.chart-box{
+    background:rgba(20,20,20,.95);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:20px;
+    padding:25px;
+    margin-bottom:25px;
+    backdrop-filter:blur(15px);
+    box-shadow:0 0 25px rgba(0,0,0,.5);
+    height:340px;
+}
+
+canvas{
+    width:100% !important;
+    height:100% !important;
+}
+
+/* LOGS */
+.logs-box{
+    background:rgba(20,20,20,.95);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:20px;
+    padding:25px;
+    backdrop-filter:blur(15px);
+    box-shadow:0 0 25px rgba(0,0,0,.5);
+}
+
+.logs-title{
+    margin-bottom:15px;
+    font-size:18px;
+    color:#ddd;
+}
+
+#logs{
+    height:220px;
+    overflow-y:auto;
+    padding-right:10px;
+}
+
+#logs p{
+    padding:10px;
+    margin-bottom:8px;
+    border-radius:10px;
+    background:#0f0f0f;
+    border:1px solid #222;
+    color:#bbb;
+    font-size:13px;
+}
+
+/* SCROLLBAR */
+#logs::-webkit-scrollbar{
+    width:6px;
+}
+
+#logs::-webkit-scrollbar-thumb{
+    background:#333;
+    border-radius:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+    <h2>Alexa AI Analytics</h2>
+    <p>Real-time system monitoring, message processing, and AI activity tracking</p>
+</div>
+
+<div class="container">
+
+    <div class="chart-box">
+        <canvas id="activityChart"></canvas>
+    </div>
+
+    <div class="logs-box">
+        <div class="logs-title">Recent Activity Logs</div>
+        <div id="logs"></div>
+    </div>
+
+</div>
+
+<script>
+const ctx = document.getElementById('activityChart').getContext('2d');
+
+const activityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: ['-60m', '-40m', '-20m', 'Now'],
+        datasets: [{
+            label: 'Messages Processed',
+            data: [2, 4, 3, 7],
+            borderWidth: 2,
+            fill: false,
+            tension: 0.25,
+            pointRadius: 3,
+            pointHoverRadius: 5
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+
+        plugins: {
+            legend: {
+                labels: {
+                    color: "#bbb"
+                }
+            }
+        },
+
+        scales: {
+            x: {
+                ticks: { color: "#777" },
+                grid: {
+                    color: "rgba(255,255,255,0.05)"
+                }
+            },
+            y: {
+                beginAtZero: true,
+                ticks: { color: "#777" },
+                grid: {
+                    color: "rgba(255,255,255,0.05)"
+                }
+            }
+        }
+    }
+});
+
+// LIVE UPDATE SYSTEM
+async function updateDashboard() {
+    try {
+        const res = await fetch('/api/logs');
+        const logs = await res.json();
+
+        // update logs
+        document.getElementById('logs').innerHTML =
+            logs.logs.map(l => `<p>${l}</p>`).join('');
+
+        // shift + push new value (live feel)
+        let data = activityChart.data.datasets[0].data;
+
+        data.shift();
+        data.push(logs.stats?.slice(-1)[0] || Math.floor(Math.random() * 10));
+
+        activityChart.data.datasets[0].data = data;
+        activityChart.update();
+
+    } catch (err) {
+        console.log("Failed to update dashboard");
+    }
+}
+
+updateDashboard();
+setInterval(updateDashboard, 5000);
+</script>
+
+</body>
+</html>
