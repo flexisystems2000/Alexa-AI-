@@ -335,7 +335,7 @@ const routeCommand = async (
                 // Add this log to see the request being sent
                 console.log("Sending AI request to API...");
 
-                const response = await axios.post("https://flexieduconsult-ai-link.onrender.com", { prompt });
+                const response = await axios.post("https://flexieduconsult-ai-link.onrender.com/ai", { prompt });
 
                 // Add this log to see EXACTLY what the AI returned
                 console.log("RAW API RESPONSE DATA:", JSON.stringify(response.data, null, 2));
