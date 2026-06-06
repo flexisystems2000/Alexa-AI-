@@ -327,27 +327,32 @@ const routeCommand = async (
          */
 
                 case "ai":
-            if (!args.length) return msg.reply("Usage: !ai your question");
+    if (!args.length) return msg.reply("Usage: !ai your question");
 
-            try {
-                const prompt = args.join(" ");
-                
-                // Add this log to see the request being sent
-                console.log("Sending AI request to API...");
+    try {
+        const prompt = args.join(" ");
+        
+        console.log("Sending AI request to API as Alexa...");
 
-                const response = await axios.post("https://flexieduconsult-ai-link.onrender.com/ai", { prompt });
+        // We add "botName: 'Alexa'" here so the server knows who to be
+        const response = await axios.post("https://flexieduconsult-ai-link.onrender.com/ai", { 
+            prompt: prompt,
+            botName: "Alexa" 
+        });
 
-                // Add this log to see EXACTLY what the AI returned
-                console.log("RAW API RESPONSE DATA:", JSON.stringify(response.data, null, 2));
+        console.log("RAW API RESPONSE DATA:", JSON.stringify(response.data, null, 2));
 
-                const reply = response.data.reply || response.data.result || "No response received.";
-                await msg.reply(reply);
+        // The server sends back the text in the 'result' key
+        const reply = response.data.result || response.data.reply || "No response received.";
+        
+        await msg.reply(reply);
 
-            } catch (err) {
-                console.error("AI API Error:", err.message);
-                await msg.reply("❌ AI server error. Check logs for details.");
-            }
-            break;
+    } catch (err) {
+        console.error("AI API Error:", err.message);
+        await msg.reply("❌ AI server error. Check logs for details.");
+    }
+    break;
+            
             
         /**
          * =====================
