@@ -20,7 +20,6 @@ app.use(session({
     saveUninitialized: true
 }));
 
-
 let sock;
 
 const extractText = (msg) => {
@@ -35,7 +34,6 @@ async function startBot() {
     sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
-        // Using a standard desktop browser string for better connection stability
         browser: ['Windows', 'Chrome', '124.0.6367.61'], 
         generateHighQualityLinkPreview: true
     });
@@ -90,6 +88,8 @@ async function startBot() {
     });
 }
 
+// ... (Rest of your Dashboard and API routes remain the same)
+// Just ensure you keep startBot(); and app.listen at the bottom.
 // =====================================================
 // DASHBOARD & API ROUTES
 // =====================================================
@@ -150,3 +150,4 @@ setInterval(() => {
 
 startBot();
 app.listen(port, () => console.log(`🚀 Dashboard active on port ${port}`));
+                                                                           
