@@ -20,7 +20,6 @@ app.use(session({
     saveUninitialized: true
 }));
 
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
 let sock;
 
