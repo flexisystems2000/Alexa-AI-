@@ -342,7 +342,7 @@ const routeCommand = async (
 
                 const response =
                     await axios.post(
-                        "https://YOUR-AI-SERVER-LINK/ai",
+                        "https://flexieduconsult-ai-link.onrender.com/ai",
                         {
                             prompt
                         }
