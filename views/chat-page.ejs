@@ -147,7 +147,6 @@ button:hover{
     </div>
 
 </div>
-
 <script>
 async function sendMessage() {
     const input = document.getElementById('msgInput');
@@ -159,10 +158,8 @@ async function sendMessage() {
     input.value = '';
 
     // USER MESSAGE
-    chat.innerHTML += `
-        <div class="message user">${userText}</div>
-    `;
-
+    // Use insertAdjacentHTML instead of innerHTML +=
+    chat.insertAdjacentHTML('beforeend', `<div class="message user">${userText}</div>`);
     chat.scrollTop = chat.scrollHeight;
 
     try {
@@ -175,21 +172,17 @@ async function sendMessage() {
         const data = await res.json();
 
         // BOT MESSAGE
-        chat.innerHTML += `
-            <div class="message bot">${data.response}</div>
-        `;
-
-        chat.scrollTop = chat.scrollHeight;
+        // Ensure data.response contains the text you expect from your API
+        const botResponse = data.response || "No response received.";
+        chat.insertAdjacentHTML('beforeend', `<div class="message bot">${botResponse}</div>`);
 
     } catch (err) {
-        chat.innerHTML += `
-            <div class="message bot">System error: Unable to reach Alexa AI</div>
-        `;
+        console.error(err);
+        chat.insertAdjacentHTML('beforeend', `<div class="message bot">System error: Unable to reach Alexa AI</div>`);
     }
 
     chat.scrollTop = chat.scrollHeight;
 }
 </script>
-
 </body>
 </html>
