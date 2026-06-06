@@ -182,7 +182,7 @@ async function requestPairing() {
 
     } catch (err) {
         // 4. Handle connection crashes
-        display.innerText = "Connection Failed";
+        display.innerText = "Server Error";
         console.error("Fetch Error:", err);
     }
 }
