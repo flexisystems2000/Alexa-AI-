@@ -1,17 +1,19 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const express = require('express');
 const session = require('express-session');
-const axios = require('axios'); // Required for heartbeat
+const axios = require('axios');
+
+// --- SYSTEM GUARDS (Keeps the bot from crashing on minor errors) ---
+process.on('uncaughtException', (err) => console.log('⚠️ System Error:', err.message));
+process.on('unhandledRejection', (err) => console.log('⚠️ Rejection Guard:', err.message));
 
 const { routeCommand, activeQuiz, scores, saveScores } = require('./commandRouter');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// =====================================================
-// MIDDLEWARE & CONFIG
-// =====================================================
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(session({
@@ -29,13 +31,16 @@ const extractText = (msg) => {
 };
 
 async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('baileys_auth');
+    // Renamed to 'auth_info' as it is a more stable naming convention
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
 
     sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
         browser: ['Windows', 'Chrome', '124.0.6367.61'], 
-        generateHighQualityLinkPreview: true
+        generateHighQualityLinkPreview: true,
+        connectTimeoutMs: 60000, // Crucial for cloud stability
+        keepAliveIntervalMs: 30000 // Crucial for cloud stability
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -43,7 +48,7 @@ async function startBot() {
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
-            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            const shouldReconnect = (lastDisconnect?.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) startBot();
         } else if (connection === 'open') {
             console.log('✅ Baileys Client Ready');
@@ -88,11 +93,7 @@ async function startBot() {
     });
 }
 
-// ... (Rest of your Dashboard and API routes remain the same)
-// Just ensure you keep startBot(); and app.listen at the bottom.
-// =====================================================
-// DASHBOARD & API ROUTES
-// =====================================================
+// --- DASHBOARD & API ROUTES ---
 const isAuthenticated = (req, res, next) => req.session.isLoggedIn ? next() : res.redirect('/login');
 app.set('view engine', 'ejs');
 
@@ -143,11 +144,13 @@ app.post('/api/chat', isAuthenticated, async (req, res) => {
     await routeCommand('ai', [message], mockMsg, sock, "Alexa");
 });
 
-// HEARTBEAT: Ping your AI service every 10 mins to prevent spin-down
 setInterval(() => {
     axios.get("https://flexieduconsult-ai-link.onrender.com").catch(() => {});
 }, 600000);
 
-startBot();
-app.listen(port, () => console.log(`🚀 Dashboard active on port ${port}`));
-                                                                           
+// --- START BOT ONLY AFTER SERVER IS READY ---
+app.listen(port, () => {
+    console.log(`🚀 Dashboard active on port ${port}`);
+    startBot();
+});
+            
