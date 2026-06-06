@@ -163,9 +163,9 @@ const routeCommand = async (command, args, msg, sock, botName) => {
             try {
                 const prompt = args.join(" ");
                 console.log("DEBUG: Prompt is:", prompt);
-                console.log("DEBUG: Sending POST to: https://flexieduconsult-ai-link.onrender.com/ai");
+                console.log("DEBUG: Sending POST to: https://flexieduconsult-ai-link-z60r.onrender.com/ai");
 
-                const response = await axios.post("https://flexieduconsult-ai-link.onrender.com/ai", { 
+                const response = await axios.post("https://flexieduconsult-ai-link-z60r.onrender.com/ai", { 
                     prompt: prompt,
                     botName: botName 
                 }, { timeout: 10000 }); // Added a 10s timeout to prevent hanging
