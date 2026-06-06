@@ -340,7 +340,7 @@ const routeCommand = async (
                 // Add this log to see EXACTLY what the AI returned
                 console.log("RAW API RESPONSE DATA:", JSON.stringify(response.data, null, 2));
 
-                const reply = response.data.reply || response.data.response || "No response received.";
+                const reply = response.data.reply || response.data.result || "No response received.";
                 await msg.reply(reply);
 
             } catch (err) {
