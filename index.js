@@ -3,6 +3,7 @@ const pino = require('pino');
 const express = require('express');
 const session = require('express-session');
 const admin = require('firebase-admin');
+const axios = require('axios'); // Required for heartbeat
 
 const { routeCommand, activeQuiz, scores, saveScores } = require('./commandRouter');
 
@@ -37,7 +38,9 @@ async function startBot() {
     sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
-        browser: ['Alexa AI', 'Chrome', '1.0.0']
+        // Using a standard desktop browser string for better connection stability
+        browser: ['Windows', 'Chrome', '124.0.6367.61'], 
+        generateHighQualityLinkPreview: true
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -111,11 +114,15 @@ app.get('/logs', isAuthenticated, (req, res) => res.render('logs-page'));
 app.get('/chat', isAuthenticated, (req, res) => res.render('chat-page'));
 
 app.get('/api/pair', isAuthenticated, async (req, res) => {
+    const phone = req.query.phone?.replace(/[^0-9]/g, '');
+    if (!sock) return res.status(500).json({ error: 'Bot not ready.' });
+    if (!phone) return res.status(400).json({ error: 'Invalid phone number.' });
+    
     try {
-        const code = await sock.requestPairingCode(req.query.phone);
+        const code = await sock.requestPairingCode(phone);
         res.json({ pairingCode: code });
     } catch (err) {
-        res.status(500).json({ error: 'Pairing failed.' });
+        res.status(500).json({ error: 'Pairing failed. Wait 60s and retry.' });
     }
 });
 
@@ -139,6 +146,10 @@ app.post('/api/chat', isAuthenticated, async (req, res) => {
     await routeCommand('ai', [message], mockMsg, sock, "Alexa");
 });
 
+// HEARTBEAT: Ping your AI service every 10 mins to prevent spin-down
+setInterval(() => {
+    axios.get("https://flexieduconsult-ai-link.onrender.com").catch(() => {});
+}, 600000);
+
 startBot();
 app.listen(port, () => console.log(`🚀 Dashboard active on port ${port}`));
-         
