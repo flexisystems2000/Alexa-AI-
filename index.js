@@ -2,7 +2,6 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 const pino = require('pino');
 const express = require('express');
 const session = require('express-session');
-const admin = require('firebase-admin');
 const axios = require('axios'); // Required for heartbeat
 
 const { routeCommand, activeQuiz, scores, saveScores } = require('./commandRouter');
@@ -21,7 +20,6 @@ app.use(session({
     saveUninitialized: true
 }));
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
 let sock;
