@@ -25,16 +25,12 @@ admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
 let sock;
 
-// Helper: Extract text from Baileys message object
 const extractText = (msg) => {
     return msg.message?.conversation || 
            msg.message?.extendedTextMessage?.text || 
            msg.message?.imageMessage?.caption || "";
 };
 
-// =====================================================
-// BAILEYS CONNECTION LOGIC
-// =====================================================
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('baileys_auth');
 
@@ -56,7 +52,6 @@ async function startBot() {
         }
     });
 
-    // Message Handler
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe) return;
@@ -64,7 +59,6 @@ async function startBot() {
         const body = extractText(msg);
         const from = msg.key.remoteJid;
 
-        // Compatibility object for existing commandRouter
         const mockMsg = {
             body: body,
             from: from,
@@ -73,7 +67,6 @@ async function startBot() {
             react: async (emoji) => await sock.sendMessage(from, { react: { text: emoji, key: msg.key } })
         };
 
-        // Quiz Logic
         const groupQuiz = activeQuiz[from];
         if (groupQuiz && !groupQuiz.answered && !body.startsWith('!')) {
             const answer = body.trim().toUpperCase();
@@ -90,7 +83,6 @@ async function startBot() {
             }
         }
 
-        // Command Handler
         if (body.startsWith('!')) {
             const parts = body.slice(1).trim().split(/ +/);
             await routeCommand(parts[0].toLowerCase(), parts.slice(1), mockMsg, sock, "Alexa");
@@ -102,7 +94,6 @@ async function startBot() {
 // DASHBOARD & API ROUTES
 // =====================================================
 const isAuthenticated = (req, res, next) => req.session.isLoggedIn ? next() : res.redirect('/login');
-
 app.set('view engine', 'ejs');
 
 app.get('/login', (req, res) => res.render('login'));
@@ -115,17 +106,39 @@ app.post('/login', (req, res) => {
 
 app.get('/', isAuthenticated, (req, res) => res.render('index', { year: new Date().getFullYear(), contact: "09034159839" }));
 app.get('/pair', isAuthenticated, (req, res) => res.render('pairing-page'));
+app.get('/broadcast', isAuthenticated, (req, res) => res.render('broadcast-page'));
+app.get('/logs', isAuthenticated, (req, res) => res.render('logs-page'));
+app.get('/chat', isAuthenticated, (req, res) => res.render('chat-page'));
 
 app.get('/api/pair', isAuthenticated, async (req, res) => {
     try {
         const code = await sock.requestPairingCode(req.query.phone);
         res.json({ pairingCode: code });
     } catch (err) {
-        res.status(500).json({ error: 'Pairing failed. Wait 60s and retry.' });
+        res.status(500).json({ error: 'Pairing failed.' });
     }
 });
 
-// Start
+app.post('/api/broadcast', isAuthenticated, async (req, res) => {
+    try {
+        const { target, message } = req.body;
+        await sock.sendMessage(target, { text: message });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/chat', isAuthenticated, async (req, res) => {
+    const { message } = req.body;
+    const mockMsg = {
+        body: `!ai ${message}`,
+        from: "dashboard",
+        reply: (txt) => res.json({ response: txt })
+    };
+    await routeCommand('ai', [message], mockMsg, sock, "Alexa");
+});
+
 startBot();
 app.listen(port, () => console.log(`🚀 Dashboard active on port ${port}`));
-            
+         
