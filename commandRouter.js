@@ -326,50 +326,29 @@ const routeCommand = async (
          * =====================
          */
 
-        case "ai":
-
-            if (!args.length) {
-
-                return msg.reply(
-                    "Usage: !ai your question"
-                );
-            }
+                case "ai":
+            if (!args.length) return msg.reply("Usage: !ai your question");
 
             try {
+                const prompt = args.join(" ");
+                
+                // Add this log to see the request being sent
+                console.log("Sending AI request to API...");
 
-                const prompt =
-                    args.join(" ");
+                const response = await axios.post("YOUR_CORRECT_URL_HERE", { prompt });
 
-                const response =
-                    await axios.post(
-                        "https://flexieduconsult-ai-link.onrender.com/ai",
-                        {
-                            prompt
-                        }
-                    );
+                // Add this log to see EXACTLY what the AI returned
+                console.log("RAW API RESPONSE DATA:", JSON.stringify(response.data, null, 2));
 
-                const reply =
-                    response.data.reply ||
-                    response.data.response ||
-                    "No response received.";
-
-                await msg.reply(
-                    reply
-                );
+                const reply = response.data.reply || response.data.response || "No response received.";
+                await msg.reply(reply);
 
             } catch (err) {
-
-                console.error(
-                    err
-                );
-
-                await msg.reply(
-                    "❌ AI server unavailable."
-                );
+                console.error("AI API Error:", err.message);
+                await msg.reply("❌ AI server error. Check logs for details.");
             }
-
             break;
-
+            
         /**
          * =====================
          * QUIZ
