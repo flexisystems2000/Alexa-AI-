@@ -151,29 +151,41 @@ button:hover{
     </div>
 
 </div>
-
 <script>
 async function requestPairing() {
-    const phone = document.getElementById('phone').value;
+    const phoneInput = document.getElementById('phone');
     const display = document.getElementById('codeDisplay');
+    
+    // 1. Sanitize: Remove all non-numeric characters (spaces, +, dashes)
+    const phone = phoneInput.value.replace(/\D/g, '');
+
+    if (!phone) {
+        display.innerText = "Please enter a valid number";
+        return;
+    }
 
     display.innerText = "Generating Code...";
 
     try {
+        // 2. Fetch from your backend
         const res = await fetch(`/api/pair?phone=${phone}`);
         const data = await res.json();
 
-        if (data.pairingCode) {
+        // 3. Handle response
+        if (res.ok && data.pairingCode) {
             display.innerText = data.pairingCode;
         } else {
-            display.innerText = "Unable to generate code";
+            // Display the specific error from the server, or a fallback
+            display.innerText = data.error || "Unable to generate code";
+            console.error("Server Error:", data.error);
         }
 
     } catch (err) {
+        // 4. Handle connection crashes
         display.innerText = "Connection Failed";
+        console.error("Fetch Error:", err);
     }
 }
 </script>
-
 </body>
 </html>
