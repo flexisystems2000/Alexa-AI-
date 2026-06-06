@@ -155,22 +155,45 @@ const routeCommand = async (command, args, msg, sock, botName) => {
          * AI
          * =====================
          */
-        case "ai":
+                case "ai":
             if (!args.length) return msg.reply("Usage: !ai your question");
+            
+            console.log("DEBUG: Initiating AI Request...");
+            
             try {
                 const prompt = args.join(" ");
+                console.log("DEBUG: Prompt is:", prompt);
+                console.log("DEBUG: Sending POST to: https://flexieduconsult-ai-link.onrender.com/ai");
+
                 const response = await axios.post("https://flexieduconsult-ai-link.onrender.com/ai", { 
                     prompt: prompt,
                     botName: botName 
-                });
+                }, { timeout: 10000 }); // Added a 10s timeout to prevent hanging
+
+                console.log("DEBUG: Request successful. Data received.");
+                
                 const reply = response.data.result || response.data.reply || "No response received.";
                 await msg.reply(reply);
             } catch (err) {
-                console.error("AI API Error:", err.message);
-                await msg.reply("❌ AI server error.");
+                console.error("DEBUG: AI Request FAILED!");
+                
+                if (err.response) {
+                    // Server responded with a status code outside the 2xx range
+                    console.error("DEBUG: Response Data:", err.response.data);
+                    console.error("DEBUG: Status:", err.response.status);
+                    await msg.reply(`❌ AI API Error: Status ${err.response.status}`);
+                } else if (err.request) {
+                    // Request was made but no response was received
+                    console.error("DEBUG: No response received (Network timeout/offline).");
+                    await msg.reply("❌ AI server is offline or timed out.");
+                } else {
+                    // Something happened in setting up the request
+                    console.error("DEBUG: Error Message:", err.message);
+                    await msg.reply(`❌ Setup Error: ${err.message}`);
+                }
             }
             break;
-
+            
         /**
          * =====================
          * QUIZ
