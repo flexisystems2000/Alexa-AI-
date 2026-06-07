@@ -41,6 +41,24 @@ async function startBot() {
         generateHighQualityLinkPreview: true,
         connectTimeoutMs: 60000, // Crucial for cloud stability
         keepAliveIntervalMs: 30000 // Crucial for cloud stability
+    // 2. Add the patchMessage for modern WhatsApp compliance
+        patchMessageBeforeSending: (msg) => {
+            const needsPatch = !!(msg.buttonsMessage || msg.templateMessage || msg.listMessage);
+            if (needsPatch) {
+                msg = {
+                    viewOnceMessage: {
+                        message: {
+                            messageContextInfo: {
+                                deviceListMetadataVersion: 2,
+                                deviceListMetadata: {},
+                            },
+                            ...msg,
+                        },
+                    },
+                };
+            }
+            return msg;
+        }
     });
 
     sock.ev.on('creds.update', saveCreds);
