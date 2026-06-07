@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const express = require('express');
@@ -31,19 +31,19 @@ const extractText = (msg) => {
 };
 
 async function startBot() {
-    // Renamed to 'auth_info' as it is a more stable naming convention
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
-
-    const { version } = await fetchLatestBaileysVersion();
     
+    // 1. You fetched the version correctly
+    const { version } = await fetchLatestBaileysVersion();
+
     sock = makeWASocket({
+        version, // 2. YOU MUST INCLUDE IT HERE AS A KEY
         logger: pino({ level: 'silent' }),
         auth: state,
         browser: ['Windows', 'Chrome', '124.0.6367.61'], 
         generateHighQualityLinkPreview: true,
-        connectTimeoutMs: 60000, // Crucial for cloud stability
-        keepAliveIntervalMs: 30000, // Crucial for cloud stability
-    // 2. Add the patchMessage for modern WhatsApp compliance
+        connectTimeoutMs: 60000,
+        keepAliveIntervalMs: 30000,
         patchMessageBeforeSending: (msg) => {
             const needsPatch = !!(msg.buttonsMessage || msg.templateMessage || msg.listMessage);
             if (needsPatch) {
@@ -62,6 +62,7 @@ async function startBot() {
             return msg;
         }
     });
+    // ... rest of the code
 
     sock.ev.on('creds.update', saveCreds);
 
