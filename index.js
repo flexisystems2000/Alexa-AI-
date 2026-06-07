@@ -83,6 +83,16 @@ async function startBot() {
         const body = extractText(msg);
         const from = msg.key.remoteJid;
 
+        const sendWithTyping = async (text, jid, quotedMsg) => {
+        // 1. Tell WhatsApp the bot is typing
+        await sock.sendPresenceUpdate('composing', jid);
+        // 2. Wait for a random amount of time (1.5 to 3 seconds)
+        const delay = Math.floor(Math.random() * 1500) + 1500;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        // 3. Send the message
+        await sock.sendMessage(jid, { text }, { quoted: quotedMsg });
+    };
+        
         const mockMsg = {
             body: body,
             from: from,
