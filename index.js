@@ -40,7 +40,7 @@ async function startBot() {
         browser: ['Windows', 'Chrome', '124.0.6367.61'], 
         generateHighQualityLinkPreview: true,
         connectTimeoutMs: 60000, // Crucial for cloud stability
-        keepAliveIntervalMs: 30000 // Crucial for cloud stability
+        keepAliveIntervalMs: 30000, // Crucial for cloud stability
     // 2. Add the patchMessage for modern WhatsApp compliance
         patchMessageBeforeSending: (msg) => {
             const needsPatch = !!(msg.buttonsMessage || msg.templateMessage || msg.listMessage);
