@@ -34,6 +34,8 @@ async function startBot() {
     // Renamed to 'auth_info' as it is a more stable naming convention
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
 
+    const { version } = await fetchLatestBaileysVersion();
+    
     sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
