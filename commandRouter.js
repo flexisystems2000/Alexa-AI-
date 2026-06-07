@@ -66,6 +66,19 @@ function parseDuration(timeStr) {
     }
 }
 
+function extractJid(msg) {
+    // 1. Check if user replied to a message
+    const repliedJid = msg.message?.extendedTextMessage?.contextInfo?.participant;
+    if (repliedJid) return repliedJid;
+
+    // 2. Check if user tagged someone (mentionedJid is an array)
+    const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid;
+    if (mentionedJid && mentionedJid.length > 0) return mentionedJid[0];
+
+    return null;
+}
+
+
 async function fetchQuiz(subject) {
     const response = await axios.get(
         `https://questions.aloc.com.ng/api/v2/q?subject=${encodeURIComponent(subject)}`,
@@ -300,7 +313,42 @@ const routeCommand = async (command, args, msg, sock, botName) => {
                     }
                     break;
                 }
-
+                // Inside your group command switch (where you have kick, add, etc.)
+case "ginfo": {
+    const metadata = await sock.groupMetadata(msg.from);
+    await msg.reply(`*📊 GROUP INFO*\n\nName: ${metadata.subject}\nMembers: ${metadata.participants.length}\nOwner: ${metadata.owner ? metadata.owner.split('@')[0] : 'N/A'}\nID: ${msg.from}`);
+    break;
+}
+case "gid": {
+    await msg.reply(`*🆔 Group ID:*\n${msg.from}`);
+    break;
+}
+case "promote": {
+    const target = extractJid(msg);
+    if (!target) return msg.reply("Usage: !promote @user or reply to their message.");
+    
+    try {
+        await sock.groupParticipantsUpdate(msg.from, [target], 'promote');
+        await msg.reply("✅ User promoted to admin.");
+    } catch (err) {
+        await msg.reply("❌ Failed. Ensure I am an admin and the user is in the group.");
+    }
+    break;
+}
+case "demote": {
+    const target = extractJid(msg);
+    if (!target) return msg.reply("Usage: !demote @user or reply to their message.");
+    
+    try {
+        await sock.groupParticipantsUpdate(msg.from, [target], 'demote');
+        await msg.reply("✅ Admin privileges revoked.");
+    } catch (err) {
+        await msg.reply("❌ Failed. Ensure I am an admin and the user is in the group.");
+    }
+    break;
+}
+                    
+                    
                 /**
                  * =====================
                  * ADD
