@@ -71,14 +71,26 @@ async function startBot() {
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update;
-        if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect?.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-            if (shouldReconnect) startBot();
-        } else if (connection === 'open') {
-            console.log('✅ Baileys Client Ready');
+    const { connection, lastDisconnect } = update;
+    
+    if (connection === 'close') {
+        const statusCode = (lastDisconnect?.error instanceof Boom) ? lastDisconnect.error.output.statusCode : null;
+        
+        // If the user manually logged out via your "Terminate Session" button
+        if (statusCode === DisconnectReason.loggedOut) {
+            console.log('🔌 Session terminated by user.');
+            saveSession({ pairedNumber: null }); // Clear the UI on the dashboard
+        } else {
+            // Otherwise, reconnect automatically
+            console.log('⚠️ Connection lost, reconnecting...');
+            startBot();
         }
-    });
+    } else if (connection === 'open') {
+        console.log('✅ Baileys Client Ready');
+        // Optional: Perform any 'post-login' tasks here
+    }
+});
+    
 
     // --- GROUP PARTICIPANT EVENTS (MOVED INSIDE) ---
     sock.ev.on('group-participants.update', async (update) => {
