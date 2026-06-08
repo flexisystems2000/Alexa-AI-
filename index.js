@@ -102,7 +102,7 @@ async function startBot() {
 
         const sendWithTyping = async (text, quotedMsg) => {
             await sock.sendPresenceUpdate('composing', from);
-            const delay = Math.floor(Math.random() * 1500) + 1500;
+            const delay = Math.floor(Math.random() * 2000) + 3000;
             await new Promise(resolve => setTimeout(resolve, delay));
             await sock.sendMessage(from, { text }, { quoted: quotedMsg });
         };
