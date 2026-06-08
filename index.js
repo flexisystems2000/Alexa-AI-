@@ -172,6 +172,31 @@ app.post('/login', (req, res) => {
     } else res.status(401).send('Invalid Password');
 });
 
+app.post('/api/terminate', isAuthenticated, async (req, res) => {
+    try {
+        // 1. Attempt to log out of WhatsApp properly
+        if (sock) {
+            await sock.logout().catch(err => console.log("Logout warning:", err.message));
+        }
+
+        // 2. Clear local authentication credentials
+        if (fs.existsSync('./auth_info')) {
+            fs.rmSync('./auth_info', { recursive: true, force: true });
+        }
+
+        // 3. Reset the dashboard tracking variable
+        saveSession({ pairedNumber: null });
+
+        // 4. Respond to the dashboard
+        res.json({ success: true, message: "Session successfully terminated." });
+        
+        console.log("✅ Bot session terminated by user.");
+    } catch (err) {
+        console.error("❌ Termination Error:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 app.get('/', isAuthenticated, (req, res) => res.render('index', { year: new Date().getFullYear(), contact: "09034159839" }));
 app.get('/pair', isAuthenticated, (req, res) => res.render('pairing-page'));
 app.get('/broadcast', isAuthenticated, (req, res) => res.render('broadcast-page'));
