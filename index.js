@@ -164,12 +164,19 @@ async function startBot() {
 const isAuthenticated = (req, res, next) => req.session.isLoggedIn ? next() : res.redirect('/login');
 app.set('view engine', 'ejs');
 
-app.get('/login', (req, res) => res.render('login'));
+app.get('/login', (req, res) => {
+    // Check if there is an error message in the session (optional)
+    res.render('login', { error: null });
+});
+
 app.post('/login', (req, res) => {
     if (req.body.password === process.env.ADMIN_PASSWORD) {
         req.session.isLoggedIn = true;
         res.redirect('/');
-    } else res.status(401).send('Invalid Password');
+    } else {
+        // Render login page again with an error message
+        res.render('login', { error: 'Invalid Password. Please try again.' });
+    }
 });
 
 app.post('/api/terminate', isAuthenticated, async (req, res) => {
