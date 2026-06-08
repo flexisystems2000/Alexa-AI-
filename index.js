@@ -10,6 +10,9 @@ const path = require("path");
 const SESSION_FILE = path.join(__dirname, "session.json");
 let sessionData = fs.existsSync(SESSION_FILE) ? JSON.parse(fs.readFileSync(SESSION_FILE, "utf8")) : { pairedNumber: null };
 
+// Add this line with your other requires
+const { runModeration } = require('./moderation'); 
+
 function saveSession(data) {
     sessionData = data;
     fs.writeFileSync(SESSION_FILE, JSON.stringify(data, null, 2));
