@@ -6,6 +6,7 @@
 <title>Alexa AI Dashboard</title>
 
 <style>
+
 *{
     margin:0;
     padding:0;
@@ -20,6 +21,7 @@ body{
 }
 
 /* HERO HEADER */
+
 .hero-header{
     position:relative;
     width:100%;
@@ -73,7 +75,8 @@ body{
     line-height:1.6;
 }
 
-/* DASHBOARD CONTENT */
+/* DASHBOARD */
+
 .dashboard{
     padding:30px;
     max-width:1300px;
@@ -125,6 +128,21 @@ body{
     line-height:1.6;
 }
 
+#term-btn{
+    margin-top:15px;
+    padding:10px;
+    width:100%;
+    border:none;
+    border-radius:10px;
+    background:#d9534f;
+    color:white;
+    cursor:pointer;
+}
+
+#term-btn:hover{
+    opacity:.9;
+}
+
 footer{
     text-align:center;
     color:#666;
@@ -146,72 +164,437 @@ footer{
     .dashboard{
         padding:20px;
     }
+
 }
+
 </style>
 </head>
+
 <body>
+
 
 <header class="hero-header">
 
-    <div class="hero-content">
+<div class="hero-content">
 
-        <div class="hero-badge">
-            ALEXA AI CONTROL CENTER
-        </div>
+<div class="hero-badge">
+ALEXA AI CONTROL CENTER
+</div>
 
-        <h1>Welcome to Alexa AI Platform</h1>
+<h1>
+Welcome to Alexa AI Platform
+</h1>
 
-        <p>
-            Manage your WhatsApp AI assistant, broadcasts,
-            analytics, system logs and intelligent conversations
-            from one centralized dashboard.
-        </p>
+<p>
+Manage your WhatsApp AI assistant,
+broadcasts, analytics,
+system logs and intelligent
+conversations from one centralized
+dashboard.
+</p>
 
-    </div>
+</div>
 
 </header>
 
+
 <section class="dashboard">
 
-    <div class="card-container">
+<div class="card-container">
 
-        <a href="/pair" class="card">
-            <div class="card-badge">PAIRING</div>
-            <h3>Pair with Alexa AI</h3>
-            <p>Connect your WhatsApp instance securely using a pairing code.</p>
-        </a>
 
-        <a href="/broadcast" class="card">
-            <div class="card-badge">BROADCAST</div>
-            <h3>Broadcast with Alexa</h3>
-            <p>Send announcements and perform intelligent mass communication.</p>
-        </a>
+<!-- SESSION STATUS CARD -->
 
-        <a href="/logs" class="card">
-            <div class="card-badge">SYSTEM LOGS</div>
-            <h3>View Alexa Logs</h3>
-            <p>Monitor activities, commands, events and overall performance.</p>
-        </a>
+<div class="card" id="session-card">
 
-        <a href="/chat" class="card">
-            <div class="card-badge">AI CHAT</div>
-            <h3>Chat with Alexa AI</h3>
-            <p>Interact directly with Alexa's AI brain in real time.</p>
-        </a>
+<div class="card-badge"
+id="status-badge">
 
-        <a href="tel:09034159839" class="card">
-            <div class="card-badge">SUPPORT</div>
-            <h3>Contact Us</h3>
-            <p>Support Line: <%= contact %></p>
-        </a>
+CHECKING...
 
-    </div>
+</div>
+
+<h3 id="status-title">
+Session Status
+</h3>
+
+<p>
+
+Paired Number:
+
+<strong id="num-display">
+
+Loading...
+
+</strong>
+
+</p>
+
+<button
+id="term-btn"
+onclick="terminateSession()"
+style="display:none;"
+>
+
+Terminate Session
+
+</button>
+
+</div>
+
+
+
+<!-- PAIR -->
+
+<a href="/pair"
+class="card">
+
+<div class="card-badge">
+
+PAIRING
+
+</div>
+
+<h3>
+
+Pair with Alexa AI
+
+</h3>
+
+<p>
+
+Connect your WhatsApp
+instance securely
+using a pairing code.
+
+</p>
+
+</a>
+
+
+
+<!-- BROADCAST -->
+
+<a href="/broadcast"
+class="card">
+
+<div class="card-badge">
+
+BROADCAST
+
+</div>
+
+<h3>
+
+Broadcast with Alexa
+
+</h3>
+
+<p>
+
+Send announcements and perform
+intelligent mass communication.
+
+</p>
+
+</a>
+
+
+
+<!-- LOGS -->
+
+<a href="/logs"
+class="card">
+
+<div class="card-badge">
+
+SYSTEM LOGS
+
+</div>
+
+<h3>
+
+View Alexa Logs
+
+</h3>
+
+<p>
+
+Monitor activities,
+commands, events
+and performance.
+
+</p>
+
+</a>
+
+
+
+<!-- CHAT -->
+
+<a href="/chat"
+class="card">
+
+<div class="card-badge">
+
+AI CHAT
+
+</div>
+
+<h3>
+
+Chat with Alexa AI
+
+</h3>
+
+<p>
+
+Interact directly
+with Alexa's AI
+brain in real time.
+
+</p>
+
+</a>
+
+
+
+<!-- SUPPORT -->
+
+<a href="tel:09034159839"
+class="card">
+
+<div class="card-badge">
+
+SUPPORT
+
+</div>
+
+<h3>
+
+Contact Us
+
+</h3>
+
+<p>
+
+Support Line:
+<%= contact %>
+
+</p>
+
+</a>
+
+</div>
 
 </section>
 
+
 <footer>
-    © <%= new Date().getFullYear() %> Alexa AI • Secure Intelligence Platform
+
+© <%= new Date().getFullYear() %>
+Alexa AI • Secure Intelligence Platform
+
 </footer>
+
+
+<script>
+
+async function fetchSessionStatus(){
+
+const numDisplay=
+document.getElementById(
+"num-display"
+);
+
+const badge=
+document.getElementById(
+"status-badge"
+);
+
+const title=
+document.getElementById(
+"status-title"
+);
+
+const termBtn=
+document.getElementById(
+"term-btn"
+);
+
+try{
+
+badge.innerText=
+"CHECKING...";
+
+badge.style.background=
+"#f0ad4e";
+
+
+const response=
+await fetch(
+"/api/session"
+);
+
+if(!response.ok){
+
+throw new Error(
+"Fetch failed"
+);
+
+}
+
+const data=
+await response.json();
+
+
+if(data.pairedNumber){
+
+numDisplay.innerText=
+data.pairedNumber;
+
+title.innerText=
+"Session Active";
+
+badge.innerText=
+"ONLINE";
+
+badge.style.background=
+"#28a745";
+
+termBtn.style.display=
+"block";
+
+}
+
+else{
+
+numDisplay.innerText=
+"Not Paired";
+
+title.innerText=
+"No Active Session";
+
+badge.innerText=
+"OFFLINE";
+
+badge.style.background=
+"#333";
+
+termBtn.style.display=
+"none";
+
+}
+
+}
+
+catch(error){
+
+console.log(error);
+
+title.innerText=
+"Connection Error";
+
+numDisplay.innerText=
+"Unavailable";
+
+badge.innerText=
+"ERROR";
+
+badge.style.background=
+"#dc3545";
+
+termBtn.style.display=
+"none";
+
+}
+
+}
+
+
+
+async function terminateSession(){
+
+if(
+!confirm(
+"Are you sure? This will unlink WhatsApp."
+)
+)
+return;
+
+
+const btn=
+document.getElementById(
+"term-btn"
+);
+
+
+try{
+
+btn.disabled=true;
+
+btn.innerText=
+"Terminating...";
+
+
+const response=
+await fetch(
+"/api/terminate",
+{
+method:"POST"
+}
+);
+
+if(!response.ok){
+
+throw new Error();
+
+}
+
+alert(
+"Session terminated successfully"
+);
+
+fetchSessionStatus();
+
+}
+
+catch(err){
+
+alert(
+"Error terminating session"
+);
+
+}
+
+finally{
+
+btn.disabled=false;
+
+btn.innerText=
+"Terminate Session";
+
+}
+
+}
+
+
+
+document.addEventListener(
+"DOMContentLoaded",
+()=>{
+
+fetchSessionStatus();
+
+setInterval(
+fetchSessionStatus,
+15000
+);
+
+}
+);
+
+</script>
 
 </body>
 </html>
