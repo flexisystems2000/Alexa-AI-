@@ -80,6 +80,11 @@ async function startBot() {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe) return;
 
+        // --- NEW: MODERATION GATEKEEPER ---
+    // If this returns true, the message was blocked/deleted, so stop here.
+    const isBlocked = await runModeration(msg, sock);
+    if (isBlocked) return; 
+        
         const body = extractText(msg);
         const from = msg.key.remoteJid;
 
