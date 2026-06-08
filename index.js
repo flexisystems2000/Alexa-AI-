@@ -4,6 +4,16 @@ const pino = require('pino');
 const express = require('express');
 const session = require('express-session');
 const axios = require('axios');
+const fs = require("fs");
+const path = require("path");
+
+const SESSION_FILE = path.join(__dirname, "session.json");
+let sessionData = fs.existsSync(SESSION_FILE) ? JSON.parse(fs.readFileSync(SESSION_FILE, "utf8")) : { pairedNumber: null };
+
+function saveSession(data) {
+    sessionData = data;
+    fs.writeFileSync(SESSION_FILE, JSON.stringify(data, null, 2));
+}
 
 // --- SYSTEM GUARDS (Keeps the bot from crashing on minor errors) ---
 process.on('uncaughtException', (err) => console.log('⚠️ System Error:', err.message));
