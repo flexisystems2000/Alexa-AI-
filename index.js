@@ -32,12 +32,10 @@ const extractText = (msg) => {
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
-    
-    // 1. You fetched the version correctly
     const { version } = await fetchLatestBaileysVersion();
 
     sock = makeWASocket({
-        version, // 2. YOU MUST INCLUDE IT HERE AS A KEY
+        version,
         logger: pino({ level: 'silent' }),
         auth: state,
         browser: ['Windows', 'Chrome', '124.0.6367.61'], 
@@ -50,10 +48,7 @@ async function startBot() {
                 msg = {
                     viewOnceMessage: {
                         message: {
-                            messageContextInfo: {
-                                deviceListMetadataVersion: 2,
-                                deviceListMetadata: {},
-                            },
+                            messageContextInfo: { deviceListMetadataVersion: 2, deviceListMetadata: {} },
                             ...msg,
                         },
                     },
@@ -62,7 +57,6 @@ async function startBot() {
             return msg;
         }
     });
-    // ... rest of the code
 
     sock.ev.on('creds.update', saveCreds);
 
@@ -76,33 +70,48 @@ async function startBot() {
         }
     });
 
+    // --- GROUP PARTICIPANT EVENTS (MOVED INSIDE) ---
+    sock.ev.on('group-participants.update', async (update) => {
+        const { id, participants, action } = update;
+        if (!participants || participants.length === 0) return;
+        const num = participants[0]; 
+        const phoneNumber = num.split('@')[0];
+        const groupMetadata = await sock.groupMetadata(id).catch(() => ({ subject: "this group" }));
+
+        if (action === 'add') {
+            const welcomeMsg = `👋 *WELCOME*\nHello @${phoneNumber}, welcome to *${groupMetadata.subject}!*\n\n📖 Please read the group description and follow all guidelines.`;
+            await sock.sendMessage(id, { text: welcomeMsg, mentions: [num] });
+        } 
+        else if (action === 'remove' || action === 'leave') {
+            const reason = action === 'remove' ? "been removed" : "left";
+            const goodbyeMsg = `🚫 *GOODBYE*\n@${phoneNumber} has ${reason} the group *${groupMetadata.subject}.*`;
+            await sock.sendMessage(id, { text: goodbyeMsg, mentions: [num] });
+        }
+    });
+
+    // --- MESSAGE PROCESSING ---
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe) return;
 
-        // --- NEW: MODERATION GATEKEEPER ---
-    // If this returns true, the message was blocked/deleted, so stop here.
-    const isBlocked = await runModeration(msg, sock);
-    if (isBlocked) return; 
+        const isBlocked = await runModeration(msg, sock);
+        if (isBlocked) return; 
         
         const body = extractText(msg);
         const from = msg.key.remoteJid;
 
-        const sendWithTyping = async (text, jid, quotedMsg) => {
-        // 1. Tell WhatsApp the bot is typing
-        await sock.sendPresenceUpdate('composing', jid);
-        // 2. Wait for a random amount of time (1.5 to 3 seconds)
-        const delay = Math.floor(Math.random() * 1500) + 1500;
-        await new Promise(resolve => setTimeout(resolve, delay));
-        // 3. Send the message
-        await sock.sendMessage(jid, { text }, { quoted: quotedMsg });
-    };
+        const sendWithTyping = async (text, quotedMsg) => {
+            await sock.sendPresenceUpdate('composing', from);
+            const delay = Math.floor(Math.random() * 1500) + 1500;
+            await new Promise(resolve => setTimeout(resolve, delay));
+            await sock.sendMessage(from, { text }, { quoted: quotedMsg });
+        };
         
         const mockMsg = {
             body: body,
             from: from,
             author: msg.key.participant || from,
-            reply: async (text) => await sock.sendMessage(from, { text }, { quoted: msg }),
+            reply: async (text) => await sendWithTyping(text, msg),
             react: async (emoji) => await sock.sendMessage(from, { react: { text: emoji, key: msg.key } })
         };
 
@@ -127,7 +136,7 @@ async function startBot() {
             await routeCommand(parts[0].toLowerCase(), parts.slice(1), mockMsg, sock, "Alexa");
         }
     });
-}
+            }
 
 // --- DASHBOARD & API ROUTES ---
 const isAuthenticated = (req, res, next) => req.session.isLoggedIn ? next() : res.redirect('/login');
