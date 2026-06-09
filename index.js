@@ -50,6 +50,10 @@ app.use(session({
 
 let sock;
 
+const groupActivity = {};
+const userActivity = {};
+const presenceStore = {};
+
 const extractText = (msg) => {
     return msg.message?.conversation || 
            msg.message?.extendedTextMessage?.text || 
@@ -86,7 +90,22 @@ async function startBot() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', (update) => {
+sock.ev.on("presence.update", (update) => {
+
+    const { id, presences } = update;
+
+    if (!presenceStore[id]) {
+        presenceStore[id] = {};
+    }
+
+    Object.assign(
+        presenceStore[id],
+        presences
+    );
+
+});
+
+    sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
     
     if (connection === 'close') {
@@ -104,7 +123,6 @@ async function startBot() {
     } else if (connection === 'open') {
         console.log('✅ Baileys Client Ready');
         // Optional: Perform any 'post-login' tasks here
-    }
 });
     
 
@@ -115,6 +133,11 @@ async function startBot() {
         const num = participants[0]; 
         const phoneNumber = num.split('@')[0];
         const groupMetadata = await sock.groupMetadata(id).catch(() => ({ subject: "this group" }));
+       for (const member of groupMetadata.participants || []) {
+    try {
+        await sock.presenceSubscribe(member.id);
+    } catch {}
+}
 
         if (action === 'add') {
             const welcomeMsg = `👋 *WELCOME*\nHello @${phoneNumber}, welcome to *${groupMetadata.subject}!*\n\n📖 Please read the group description and follow all guidelines.`;
@@ -137,6 +160,25 @@ async function startBot() {
         
         const body = extractText(msg);
         const from = msg.key.remoteJid;
+
+       if (from.endsWith("@g.us")) {
+
+    const userId = msg.key.participant || from;
+
+    groupActivity[from] = {
+        timestamp: Date.now(),
+        sender: userId
+    };
+
+    if (!userActivity[from]) {
+        userActivity[from] = {};
+    }
+
+    userActivity[from][userId] = {
+        lastSeen: Date.now(),
+        lastMessageTime: Date.now()
+    };
+}
 
         const sendWithTyping = async (text, quotedMsg) => {
             await sock.sendPresenceUpdate('composing', from);
@@ -171,7 +213,18 @@ async function startBot() {
 
         if (body.startsWith('!')) {
             const parts = body.slice(1).trim().split(/ +/);
-            await routeCommand(parts[0].toLowerCase(), parts.slice(1), mockMsg, sock, "Alexa");
+            await routeCommand(
+    parts[0].toLowerCase(),
+    parts.slice(1),
+    mockMsg,
+    sock,
+    "Alexa",
+    {
+        groupActivity,
+        userActivity,
+        presenceStore
+    }
+);
         }
     });
             }
