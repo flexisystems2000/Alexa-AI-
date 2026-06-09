@@ -167,6 +167,12 @@ async function startBot() {
 const isAuthenticated = (req, res, next) => req.session.isLoggedIn ? next() : res.redirect('/login');
 app.set('view engine', 'ejs');
 
+// Add this route to keep the server alive without authentication
+app.get('/ping', (req, res) => {
+    res.status(200).send('Bot is alive');
+});
+
+
 app.get('/login', (req, res) => {
     // Check if there is an error message in the session (optional)
     res.render('login', { error: null });
