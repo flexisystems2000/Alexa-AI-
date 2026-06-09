@@ -106,9 +106,16 @@ async function fetchQuiz(subject) {
     );
     return response.data.data;
 }
-const routeCommand = async (command, args, msg, sock, botName) => {
+const routeCommand = async (command, args, msg, sock, botName, trackers = {}) => {
+  
     // Determine if it is a group
     const isGroup = msg.from.endsWith('@g.us');
+
+   const {
+    groupActivity,
+    userActivity,
+    presenceStore
+} = trackers;
 
     switch (command.toLowerCase()) {
         /**
@@ -371,6 +378,120 @@ case "ginfo": {
     await msg.reply(`*📊 GROUP INFO*\n\nName: ${metadata.subject}\nMembers: ${metadata.participants.length}\nOwner: ${ownerPhone}\nID: ${msg.from}`);
     break;
 }
+
+case "listonline": {
+    if (!isGroup) {
+        return msg.reply("❌ This command works only in groups.");
+    }
+
+    try {
+        const metadata = await sock.groupMetadata(msg.from);
+        const participants = metadata.participants.map(p => p.id);
+
+        const onlineActive = [];
+        const onlineInactive = [];
+        const offline = [];
+
+        const latestTimestamp =
+            groupActivity?.[msg.from]?.timestamp || 0;
+
+        for (const jid of participants) {
+
+               const presence =
+    presenceStore?.[msg.from]?.[jid];
+
+            const isOnline =
+                presence &&
+                presence.lastKnownPresence !== "unavailable";
+
+            const lastActivity =
+                userActivity?.[msg.from]?.[jid]?.lastMessageTime || 0;
+
+            const activeAfterLatest =
+    (Date.now() - lastActivity) < 300000;
+
+            if (isOnline) {
+
+                if (activeAfterLatest) {
+                    onlineActive.push(jid);
+                } else {
+                    onlineInactive.push(jid);
+                }
+
+            } else {
+                offline.push(jid);
+            }
+        }
+
+        const totalMembers = participants.length;
+        const totalOnline =
+            onlineActive.length + onlineInactive.length;
+
+        const activeRate =
+            totalOnline > 0
+                ? (
+                    (onlineActive.length / totalOnline) *
+                    100
+                ).toFixed(1)
+                : "0.0";
+
+        let report = `📊 *GROUP ACTIVITY REPORT*\n\n`;
+
+        report += `🟢 *ONLINE & ACTIVE* (${onlineActive.length})\n`;
+        report += onlineActive.length
+            ? onlineActive
+                  .map(j => `• @${j.split("@")[0]}`)
+                  .join("\n")
+            : "None";
+        report += "\n\n";
+
+        report += `🟡 *ONLINE BUT INACTIVE* (${onlineInactive.length})\n`;
+        report += onlineInactive.length
+            ? onlineInactive
+                  .map(j => `• @${j.split("@")[0]}`)
+                  .join("\n")
+            : "None";
+        report += "\n\n";
+
+        report += `⚫ *OFFLINE* (${offline.length})\n`;
+        report += offline.length
+            ? offline
+                  .slice(0, 20)
+                  .map(j => `• @${j.split("@")[0]}`)
+                  .join("\n")
+            : "None";
+
+        if (offline.length > 20) {
+            report += `\n...and ${offline.length - 20} more`;
+        }
+
+        report += `\n\n━━━━━━━━━━━━━━`;
+        report += `\n👥 Total Members: ${totalMembers}`;
+        report += `\n🟢 Online: ${totalOnline}`;
+        report += `\n⚫ Offline: ${offline.length}`;
+        report += `\n📈 Engagement Rate: ${activeRate}%`;
+
+        await sock.sendMessage(
+            msg.from,
+            {
+                text: report,
+                mentions: [
+                    ...onlineActive,
+                    ...onlineInactive
+                ]
+            }
+        );
+
+    } catch (err) {
+        console.error("LISTONLINE ERROR:", err);
+        await msg.reply(
+            "❌ Failed to generate activity report."
+        );
+    }
+
+    break;
+}
+
 case "gid": {
     await msg.reply(`*🆔 Group ID:*\n${msg.from}`);
     break;
