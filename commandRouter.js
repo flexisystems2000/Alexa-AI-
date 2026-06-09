@@ -5,6 +5,19 @@ const axios = require("axios");
 
 /**
  * ==========================
+ * HELPER: Convert UID to Phone Number
+ * ==========================
+ */
+function getPhoneNumber(whatsappId) {
+    if (!whatsappId) return "Unknown";
+    let num = whatsappId.split("@")[0];
+    if (num.startsWith("0")) num = "+234" + num.slice(1);
+    else if (!num.startsWith("+")) num = "+" + num;
+    return num;
+}
+
+/**
+ * ==========================
  * QUIZ STATE
  * ==========================
  */
@@ -36,6 +49,7 @@ function saveScores() {
         console.error("Failed saving scores", err);
     }
 }
+
 
 /**
  * ==========================
@@ -207,83 +221,120 @@ const routeCommand = async (command, args, msg, sock, botName) => {
             }
             break;
             
-        /**
-         * =====================
-         * QUIZ
-         * =====================
-         */
-        case "quiz": {
-            if (!isGroup) return msg.reply("❌ Quiz works only in groups.");
-            if (activeQuiz[msg.from]) return msg.reply("⚠️ A quiz is already active.");
+/**
+ * =====================
+ * QUIZ
+ * =====================
+ */
+case "quiz": {
+    if (!isGroup) return msg.reply("❌ Quiz works only in groups.");
+    if (activeQuiz[msg.from]) return msg.reply("⚠️ A quiz is already active.");
 
-            const subject = (args[0] || "").toLowerCase();
-            const allowed = ["english", "mathematics", "chemistry", "physics", "biology"];
-            if (!allowed.includes(subject)) {
-                return msg.reply(`Usage:\n!quiz [${allowed.join('|')}]`);
-            }
+    const subject = (args[0] || "").toLowerCase();
+    const allowed = ["english", "mathematics", "chemistry", "physics", "biology"];
+    if (!allowed.includes(subject)) {
+        return msg.reply(`Usage:\n!quiz [${allowed.join('|')}]`);
+    }
 
+    try {
+        const q = await fetchQuiz(subject);
+        const question = cleanHTML(q.question);
+        const section = cleanHTML(q.section);
+        const solution = cleanHTML(q.solution);
+
+        // Image Handling for Baileys
+        if (q.image && q.image.trim() !== "") {
             try {
-                const q = await fetchQuiz(subject);
-                let question = cleanHTML(q.question);
-                let section = cleanHTML(q.section);
-                let solution = cleanHTML(q.solution);
-
-                // Image Handling for Baileys
-                if (q.image && q.image.trim() !== "") {
-                    try {
-                        await sock.sendMessage(msg.from, { image: { url: q.image } });
-                    } catch (err) {
-                        console.error("Quiz Image Error:", err);
-                    }
-                }
-
-                activeQuiz[msg.from] = {
-                    answer: (q.answer || "").toUpperCase(),
-                    solution, question, subject, answered: false
-                };
-
-                let text = `🧠 FLEXI QUIZ\n\n📚 Subject: ${subject}\n📝 Exam: ${q.examtype || "N/A"} ${q.examyear || ""}\n\n`;
-                if (section) text += `${section}\n\n`;
-                text += `${question}\n\nA. ${q.option.a || ""}\nB. ${q.option.b || ""}\nC. ${q.option.c || ""}\nD. ${q.option.d || ""}\n\nReply with A, B, C, or D.`;
-
-                await msg.reply(text);
+                await sock.sendMessage(msg.from, { image: { url: q.image } });
             } catch (err) {
-                console.error(err);
-                await msg.reply("❌ Failed to fetch quiz question.");
+                console.error("Quiz Image Error:", err);
             }
-            break;
-        }
-        /**
-         * =====================
-         * SCORE
-         * =====================
-         */
-        case "score": {
-            const user = msg.author || msg.from;
-            const total = scores[user] || 0;
-            await msg.reply(`🏆 Your Score: ${total}`);
-            break;
         }
 
-        /**
-         * =====================
-         * LEADERBOARD
-         * =====================
-         */
-        case "leaderboard": {
-            const sorted = Object.entries(scores)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 10);
+        // Store active quiz for this group
+        activeQuiz[msg.from] = {
+            answer: (q.answer || "").toUpperCase(),
+            solution,
+            question,
+            subject,
+            answered: false
+        };
 
-            if (!sorted.length) return msg.reply("No scores yet.");
+        // Build and send quiz message
+        let text = `🧠 FLEXI QUIZ\n\n📚 Subject: ${subject}\n📝 Exam: ${q.examtype || "N/A"} ${q.examyear || ""}\n\n`;
+        if (section) text += `${section}\n\n`;
+        text += `${question}\n\nA. ${q.option.a || ""}\nB. ${q.option.b || ""}\nC. ${q.option.c || ""}\nD. ${q.option.d || ""}\n\nReply with A, B, C, or D.`;
 
-            let board = "🏆 GLOBAL LEADERBOARD\n\n";
-            for (let i = 0; i < sorted.length; i++) {
-                board += `${i + 1}. ${sorted[i][0]}\n⭐ ${sorted[i][1]} points\n\n`;
-            }
-            await msg.reply(board);
-            break;
-        }
+        await msg.reply(text);
+
+    } catch (err) {
+        console.error(err);
+        await msg.reply("❌ Failed to fetch quiz question.");
+    }
+    break;
+}
+
+/**
+ * =====================
+ * HANDLE USER ANSWERS
+ * =====================
+ */
+case "answer": {
+    const quiz = activeQuiz[msg.from];
+    if (!quiz) return msg.reply("⚠️ No active quiz. Start one with !quiz [subject]");
+
+    const answer = args[0]?.toUpperCase();
+    if (!["A","B","C","D"].includes(answer)) 
+        return msg.reply("❌ Invalid answer. Reply with A, B, C, or D.");
+
+    const userPhone = getPhoneNumber(msg.author || msg.from);
+
+    if (answer === quiz.answer) {
+        scores[userPhone] = (scores[userPhone] || 0) + 1;
+        saveScores();
+        await msg.reply(`🎉 Correct!\n+1 Point\nTotal Score: ${scores[userPhone]}`);
+    } else {
+        await msg.reply(`❌ Wrong!\nCorrect: ${quiz.answer}\nSolution: ${quiz.solution}`);
+    }
+
+    // Mark quiz as answered
+    quiz.answered = true;
+    delete activeQuiz[msg.from];
+    break;
+}
+
+/**
+ * =====================
+ * SCORE
+ * =====================
+ */
+case "score": {
+    const userPhone = getPhoneNumber(msg.author || msg.from); // Use phone number
+    const total = scores[userPhone] || 0;
+    await msg.reply(`🏆 Your Score: ${total}`);
+    break;
+}
+
+/**
+ * =====================
+ * LEADERBOARD
+ * =====================
+ */
+case "leaderboard": {
+    const sorted = Object.entries(scores)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
+
+    if (!sorted.length) return msg.reply("No scores yet.");
+
+    let board = "🏆 GLOBAL LEADERBOARD\n\n";
+    for (let i = 0; i < sorted.length; i++) {
+        const phone = getPhoneNumber(sorted[i][0]); // Convert UID to phone
+        board += `${i + 1}. ${phone}\n⭐ ${sorted[i][1]} points\n\n`;
+    }
+    await msg.reply(board);
+    break;
+}
 
         /**
          * =====================
@@ -316,7 +367,8 @@ const routeCommand = async (command, args, msg, sock, botName) => {
                 // Inside your group command switch (where you have kick, add, etc.)
 case "ginfo": {
     const metadata = await sock.groupMetadata(msg.from);
-    await msg.reply(`*📊 GROUP INFO*\n\nName: ${metadata.subject}\nMembers: ${metadata.participants.length}\nOwner: ${metadata.owner ? metadata.owner.split('@')[0] : 'N/A'}\nID: ${msg.from}`);
+    const ownerPhone = metadata.owner ? getPhoneNumber(metadata.owner) : 'N/A'; // <--- FIX HERE
+    await msg.reply(`*📊 GROUP INFO*\n\nName: ${metadata.subject}\nMembers: ${metadata.participants.length}\nOwner: ${ownerPhone}\nID: ${msg.from}`);
     break;
 }
 case "gid": {
