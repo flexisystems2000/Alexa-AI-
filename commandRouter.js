@@ -335,14 +335,21 @@ case "leaderboard": {
     if (!sorted.length) return msg.reply("No scores yet.");
 
     let board = "🏆 GLOBAL LEADERBOARD\n\n";
+    const mentions = []; // Array to store JIDs for tagging
+
     for (let i = 0; i < sorted.length; i++) {
-        const phone = getPhoneNumber(sorted[i][0]); // Convert UID to phone
-        board += `${i + 1}. ${phone}\n⭐ ${sorted[i][1]} points\n\n`;
+        const jid = sorted[i][0]; // Assuming your score keys are JIDs
+        mentions.push(jid);
+        board += `${i + 1}. @${jid.split('@')[0]}\n⭐ ${sorted[i][1]} points\n\n`;
     }
-    await msg.reply(board);
+
+    await sock.sendMessage(msg.from, { 
+        text: board, 
+        mentions: mentions 
+    });
     break;
 }
-
+            
         /**
          * =====================
          * GROUP COMMANDS GATEWAY
@@ -380,9 +387,7 @@ case "ginfo": {
 }
 
 case "listonline": {
-    if (!isGroup) {
-        return msg.reply("❌ This command works only in groups.");
-    }
+    if (!isGroup) return msg.reply("❌ This command works only in groups.");
 
     try {
         const metadata = await sock.groupMetadata(msg.from);
@@ -392,107 +397,54 @@ case "listonline": {
         const onlineInactive = [];
         const offline = [];
 
-        const latestTimestamp =
-            groupActivity?.[msg.from]?.timestamp || 0;
-
+        // Determine status for each participant
         for (const jid of participants) {
-
-               const presence =
-    presenceStore?.[msg.from]?.[jid];
-
-            const isOnline =
-                presence &&
-                presence.lastKnownPresence !== "unavailable";
-
-            const lastActivity =
-                userActivity?.[msg.from]?.[jid]?.lastMessageTime || 0;
-
-            const activeAfterLatest =
-    (Date.now() - lastActivity) < 300000;
+            const presence = presenceStore?.[msg.from]?.[jid];
+            const isOnline = presence && presence.lastKnownPresence !== "unavailable";
+            const lastActivity = userActivity?.[msg.from]?.[jid]?.lastMessageTime || 0;
+            const activeAfterLatest = (Date.now() - lastActivity) < 300000;
 
             if (isOnline) {
-
-                if (activeAfterLatest) {
-                    onlineActive.push(jid);
-                } else {
-                    onlineInactive.push(jid);
-                }
-
+                activeAfterLatest ? onlineActive.push(jid) : onlineInactive.push(jid);
             } else {
                 offline.push(jid);
             }
         }
 
-        const totalMembers = participants.length;
-        const totalOnline =
-            onlineActive.length + onlineInactive.length;
-
-        const activeRate =
-            totalOnline > 0
-                ? (
-                    (onlineActive.length / totalOnline) *
-                    100
-                ).toFixed(1)
-                : "0.0";
-
+        // Generate the report
         let report = `📊 *GROUP ACTIVITY REPORT*\n\n`;
 
-        report += `🟢 *ONLINE & ACTIVE* (${onlineActive.length})\n`;
-        report += onlineActive.length
-            ? onlineActive
-                  .map(j => `• @${j.split("@")[0]}`)
-                  .join("\n")
-            : "None";
-        report += "\n\n";
+        const buildSection = (title, list) => {
+            let section = `${title} (${list.length})\n`;
+            if (list.length === 0) return section + "None\n\n";
+            // Use @user in text, link with JID in mentions
+            section += list.map(j => `• @user`).join("\n") + "\n\n";
+            return section;
+        };
 
-        report += `🟡 *ONLINE BUT INACTIVE* (${onlineInactive.length})\n`;
-        report += onlineInactive.length
-            ? onlineInactive
-                  .map(j => `• @${j.split("@")[0]}`)
-                  .join("\n")
-            : "None";
-        report += "\n\n";
+        report += buildSection("🟢 *ONLINE & ACTIVE*", onlineActive);
+        report += buildSection("🟡 *ONLINE BUT INACTIVE*", onlineInactive);
+        
+        // Add total counts
+        report += `👥 Total Members: ${participants.length}\n`;
+        report += `📈 Engagement: ${participants.length > 0 ? ((onlineActive.length / participants.length) * 100).toFixed(1) : 0}%`;
 
-        report += `⚫ *OFFLINE* (${offline.length})\n`;
-        report += offline.length
-            ? offline
-                  .slice(0, 20)
-                  .map(j => `• @${j.split("@")[0]}`)
-                  .join("\n")
-            : "None";
-
-        if (offline.length > 20) {
-            report += `\n...and ${offline.length - 20} more`;
-        }
-
-        report += `\n\n━━━━━━━━━━━━━━`;
-        report += `\n👥 Total Members: ${totalMembers}`;
-        report += `\n🟢 Online: ${totalOnline}`;
-        report += `\n⚫ Offline: ${offline.length}`;
-        report += `\n📈 Engagement Rate: ${activeRate}%`;
-
-        await sock.sendMessage(
-            msg.from,
-            {
-                text: report,
-                mentions: [
-                    ...onlineActive,
-                    ...onlineInactive
-                ]
-            }
-        );
+        // IMPORTANT: The mentions array MUST correspond to the order of '@user' in the text
+        // or just include all JIDs so WhatsApp handles the mapping automatically.
+        await sock.sendMessage(msg.from, {
+            text: report,
+            mentions: [...onlineActive, ...onlineInactive]
+        });
 
     } catch (err) {
         console.error("LISTONLINE ERROR:", err);
-        await msg.reply(
-            "❌ Failed to generate activity report."
-        );
+        await msg.reply("❌ Failed to generate activity report.");
     }
-
     break;
 }
-
-case "gid": {
+                    
+                    
+     case "gid": {
     await msg.reply(`*🆔 Group ID:*\n${msg.from}`);
     break;
 }
