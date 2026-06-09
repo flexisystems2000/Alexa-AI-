@@ -123,7 +123,8 @@ sock.ev.on("presence.update", (update) => {
     } else if (connection === 'open') {
         console.log('✅ Baileys Client Ready');
         // Optional: Perform any 'post-login' tasks here
-});
+    }
+    });
     
 
     // --- GROUP PARTICIPANT EVENTS (MOVED INSIDE) ---
