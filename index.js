@@ -7,6 +7,19 @@ const axios = require('axios');
 const fs = require("fs");
 const path = require("path");
 
+let logBuffer = [];
+const MAX_LOGS = 50; // Keep the last 50 logs
+
+// Override console.log to capture it
+const originalLog = console.log;
+console.log = function(...args) {
+    const message = args.join(' ');
+    logBuffer.push(`[${new Date().toLocaleTimeString()}] ${message}`);
+    if (logBuffer.length > MAX_LOGS) logBuffer.shift(); // Remove oldest log
+    originalLog.apply(console, args);
+};
+
+
 const SESSION_FILE = path.join(__dirname, "session.json");
 let sessionData = fs.existsSync(SESSION_FILE) ? JSON.parse(fs.readFileSync(SESSION_FILE, "utf8")) : { pairedNumber: null };
 
@@ -170,6 +183,10 @@ app.set('view engine', 'ejs');
 // Add this route to keep the server alive without authentication
 app.get('/ping', (req, res) => {
     res.status(200).send('Bot is alive');
+});
+
+app.get('/api/logs', isAuthenticated, (req, res) => {
+    res.json({ logs: logBuffer });
 });
 
 
