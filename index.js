@@ -60,6 +60,19 @@ const extractText = (msg) => {
            msg.message?.imageMessage?.caption || "";
 };
 
+function normalize(text) {
+    return (text || "")
+        .toLowerCase()
+        .replace(/[^\w\s]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+const isAlexaReact = (text) => {
+    const t = normalize(text);
+    return t.startsWith("alexa react") && t.includes("online");
+};
+
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     const { version } = await fetchLatestBaileysVersion();
