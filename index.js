@@ -162,6 +162,18 @@ sock.ev.on("presence.update", (update) => {
         const body = extractText(msg);
         const from = msg.key.remoteJid;
 
+         // ==========================
+// ALEXA AUTO REACT FEATURE
+// ==========================
+if (isAlexaReact(body)) {
+    await sock.sendMessage(from, {
+        react: {
+            text: "🤖",
+            key: msg.key
+        }
+    });
+}
+        
        if (from.endsWith("@g.us")) {
 
     const userId = msg.key.participant || from;
