@@ -73,10 +73,6 @@ function normalize(text) {
     return t.startsWith("alexa react") && t.includes("online");
 };
 
-const isAlexaReact = (text) => {
-    const t = normalize(text);
-    return t.startsWith("alexa react") && t.includes("online");
-};
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
