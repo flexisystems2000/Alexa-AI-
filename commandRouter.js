@@ -3,696 +3,406 @@ const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 
-/**
- * ==========================
- * HELPER: Convert UID to Phone Number
- * ==========================
- */
-function getPhoneNumber(whatsappId) {
-    if (!whatsappId) return "Unknown";
-    let num = whatsappId.split("@")[0];
+/* ==========================
+   IDENTITY HELPERS (SECURED)
+========================== */
+
+function getSender(msg) {
+    // Strictly isolate author identification properties to avoid overlapping target scopes
+    return (
+        msg.author ||
+        msg.key?.participant ||
+        msg.message?.extendedTextMessage?.contextInfo?.participant ||
+        msg.participant ||
+        msg.key?.remoteJid ||
+        null
+    );
+}
+
+function getPhoneNumber(id) {
+    if (!id) return "Unknown";
+    let num = id.split("@")[0];
     if (num.startsWith("0")) num = "+234" + num.slice(1);
     else if (!num.startsWith("+")) num = "+" + num;
     return num;
 }
 
-/**
- * ==========================
- * QUIZ STATE
- * ==========================
- */
-const activeQuiz = {};
+function getBotId(sock) {
+    return sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
+}
 
-/**
- * ==========================
- * SCORE STORAGE
- * ==========================
- */
+/* ==========================
+   SAFE GROUP METADATA WITH MEMORY CACHE
+========================== */
+
+const metadataCache = new Map();
+const CACHE_TTL = 30000;
+
+async function getGroupMetadataSafe(sock, jid) {
+    if (!jid?.endsWith("@g.us")) return null;
+
+    const cached = metadataCache.get(jid);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.data;
+    }
+
+    try {
+        const data = await sock.groupMetadata(jid);
+        metadataCache.set(jid, { data, timestamp: Date.now() });
+        return data;
+    } catch {
+        return cached?.data || null;
+    }
+}
+
+/* ==========================
+   QUIZ SYSTEM & ASYNC STORAGE
+========================== */
+
+const activeQuiz = {};
 const SCORE_FILE = path.join(__dirname, "scores.json");
 let scores = {};
+let isSaving = false;
 
 if (fs.existsSync(SCORE_FILE)) {
     try {
-        scores = JSON.parse(fs.readFileSync(SCORE_FILE, "utf8"));
-    } catch (err) {
-        console.error("Failed loading scores.json", err);
+        const raw = JSON.parse(fs.readFileSync(SCORE_FILE, "utf8"));
+        scores = raw && typeof raw === "object" ? raw : {};
+    } catch {
         scores = {};
     }
 } else {
     fs.writeFileSync(SCORE_FILE, JSON.stringify({}, null, 2));
 }
 
-function saveScores() {
+async function saveScores() {
+    if (isSaving) return;
+    isSaving = true;
+
     try {
-        fs.writeFileSync(SCORE_FILE, JSON.stringify(scores, null, 2));
+        await fs.promises.writeFile(SCORE_FILE, JSON.stringify(scores, null, 2), "utf8");
     } catch (err) {
-        console.error("Failed saving scores", err);
+        console.error("Score save error:", err);
+    } finally {
+        isSaving = false;
     }
 }
 
-/**
- * ==========================
- * HTML & DURATION HELPERS
- * ==========================
- */
+/* ==========================
+   UTILITIES & EXTRACTORS
+========================== */
+
 function cleanHTML(text) {
     if (!text) return "";
     return text
         .replace(/<sup>(.*?)<\/sup>/gi, "^($1)")
         .replace(/<sub>(.*?)<\/sub>/gi, "_($1)")
         .replace(/<br\s*\/?>/gi, "\n")
-        .replace(/<\/?[^>]+(>|$)/g, "")
+        .replace(/<\/?[^>]+>/g, "")
         .trim();
 }
 
-function parseDuration(timeStr) {
-    if (!timeStr) return null;
-    const match = timeStr.match(/^(\d+)(s|m|h)$/i);
-    if (!match) return null;
-    const value = parseInt(match[1]);
-    const unit = match[2].toLowerCase();
-    switch (unit) {
-        case "s": return value * 1000;
-        case "m": return value * 60 * 1000;
-        case "h": return value * 60 * 60 * 1000;
-        default: return null;
-    }
-}
-
 function extractJid(msg) {
-    const repliedJid = msg.message?.extendedTextMessage?.contextInfo?.participant;
-    if (repliedJid) return repliedJid;
-
-    const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid;
-    if (mentionedJid && mentionedJid.length > 0) return mentionedJid[0];
-
-    return null;
+    return (
+        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] ||
+        msg.message?.extendedTextMessage?.contextInfo?.participant ||
+        msg.message?.imageMessage?.contextInfo?.mentionedJid?.[0] ||
+        msg.message?.videoMessage?.contextInfo?.mentionedJid?.[0] ||
+        null
+    );
 }
 
 async function fetchQuiz(subject) {
-    const response = await axios.get(
-        `https://questions.aloc.com.ng/api/v2/q?subject=${encodeURIComponent(subject)}`,
+    const res = await axios.get(
+        `https://questions.aloc.com.ng/api/v2/q?subject=${subject}`,
         {
             headers: {
-                Accept: "application/json",
-                "Content-Type": "application/json",
                 AccessToken: process.env.ALOC_TOKEN || "QB-7cee3a570a3683c2ef1f"
-            }
+            },
+            timeout: 10000
         }
     );
-    return response.data.data;
+    return res.data.data;
 }
 
+/* ==========================
+   PERMISSIONS RUNTIME CHECK
+========================== */
+
+async function getPermissions(sock, msg) {
+    const isGroup = msg.from.endsWith("@g.us");
+    if (!isGroup) return null;
+
+    const metadata = await getGroupMetadataSafe(sock, msg.from);
+    if (!metadata) return null;
+
+    const sender = getSender(msg);
+    const botId = getBotId(sock);
+
+    const senderData = metadata.participants.find(p => p.id === sender);
+    const botData = metadata.participants.find(p => p.id === botId);
+
+    return {
+        isAdmin: !!(senderData?.admin || senderData?.status === "admin" || senderData?.status === "superadmin"),
+        botAdmin: !!(botData?.admin || botData?.status === "admin" || botData?.status === "superadmin"),
+        metadata
+    };
+}
+
+/* ==========================
+   CENTRALIZED COMMAND ROUTER
+========================== */
+
 const routeCommand = async (command, args, msg, sock, botName, trackers = {}) => {
-
-    // Determine if it is a group
-    const isGroup = msg.from.endsWith('@g.us');
-
-    const {
-        groupActivity,
-        userActivity,
-        presenceStore
-    } = trackers;
+    const isGroup = msg.from.endsWith("@g.us");
+    const { presenceStore } = trackers;
 
     switch (command.toLowerCase()) {
 
-        /**
-         * =====================
-         * MENU
-         * =====================
-         */
+        /* ========== MENU ========== */
         case "menu":
-            await msg.reply(`
-╔════════════════════╗
-      ${botName.toUpperCase()} AI
-╚════════════════════╝
+            return msg.reply(`
+🤖 *${botName.toUpperCase()} CORE ENGINE*
 
-📌 GENERAL COMMANDS
-!menu 
-!ping 
-!status 
+!ping
+!status
 !time
 !ai [question]
 !quiz [subject]
-!score 
+!answer [option]
+!score
 !leaderboard
 
-👮 GROUP ADMIN
+*ADMINISTRATION:*
 !kick @user
-!add 234xxxxxxxxxx
-!ginfo 
+!add 234xxx
+!promote @user
+!demote @user
+!ginfo
 !gid
-!mute [time] 
-!unmute [time]
+!mute
+!unmute
+!listonline
 `);
-            break;
 
-        /**
-         * =====================
-         * PING
-         * =====================
-         */
         case "ping":
-            await msg.reply("🏓 Pong!");
-            break;
+            return msg.reply("🏓 Pong!");
 
-        /**
-         * =====================
-         * STATUS
-         * =====================
-         */
-        case "status": {
-            const memory = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-
-            await msg.reply(`
-📊 BOT STATUS
-
-🟢 Status: Online
-💾 RAM Usage: ${memory} MB
-⚡ Platform: ${os.platform()}
-🕒 Uptime: ${Math.floor(process.uptime())} seconds
+        case "status":
+            return msg.reply(`
+🟢 Online
+💾 RAM: ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB
+⚡ OS: ${os.platform()}
+⏱ Uptime: ${Math.floor(process.uptime())}s
 `);
-            break;
-        }
 
-        /**
-         * =====================
-         * TIME
-         * =====================
-         */
         case "time":
-            await msg.reply(
-                `🕒 ${new Date().toLocaleString("en-NG", {
-                    timeZone: "Africa/Lagos"
-                })}`
-            );
-            break;
+            return msg.reply(`🕒 ${new Date().toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}`);
 
-        /**
-         * =====================
-         * AI
-         * =====================
-         */
+        /* ========== AI SUITE ========== */
         case "ai":
-            if (!args.length) return msg.reply("Usage: !ai your question");
-
-            console.log("DEBUG: Initiating AI Request...");
-
+            if (!args.length) return msg.reply("Usage: !ai question");
             try {
-                const prompt = args.join(" ");
-
-                console.log("DEBUG: Prompt is:", prompt);
-
-                const response = await axios.post(
+                const res = await axios.post(
                     "https://flexieduconsult-ai-link-z60r.onrender.com/ai",
-                    {
-                        prompt: prompt,
-                        botName: botName
-                    },
-                    { timeout: 10000 }
+                    { prompt: args.join(" "), botName },
+                    { timeout: 20000 }
                 );
-
-                const reply =
-                    response.data.result ||
-                    response.data.reply ||
-                    "No response received.";
-
-                await msg.reply(reply);
-
-            } catch (err) {
-                console.error("DEBUG: AI Request FAILED!");
-
-                if (err.response) {
-                    await msg.reply(`❌ AI API Error: Status ${err.response.status}`);
-                } else if (err.request) {
-                    await msg.reply("❌ AI server is offline or timed out.");
-                } else {
-                    await msg.reply(`❌ Setup Error: ${err.message}`);
-                }
+                return msg.reply(res.data.result || res.data.reply || "No response");
+            } catch {
+                return msg.reply("❌ AI execution timeout or engine sleeping.");
             }
-            break;
 
-        /**
-         * =====================
-         * QUIZ START
-         * =====================
-         */
+        /* ========== EDUCATIONAL GAMEPLAY ========== */
         case "quiz": {
-            if (!isGroup) return msg.reply("❌ Quiz works only in groups.");
-            if (activeQuiz[msg.from]) return msg.reply("⚠️ A quiz is already active.");
+            if (!isGroup) return msg.reply("❌ Quizzes can only run inside group threads.");
+            if (activeQuiz[msg.from]) return msg.reply("⚠️ An active quiz execution is running in this workspace.");
 
             const subject = (args[0] || "").toLowerCase();
+            const allowed = ["english", "mathematics", "chemistry", "physics", "biology"];
 
-            const allowed = [
-                "english",
-                "mathematics",
-                "chemistry",
-                "physics",
-                "biology"
-            ];
-
-            if (!allowed.includes(subject)) {
-                return msg.reply(`Usage:\n!quiz [${allowed.join('|')}]`);
-            }
+            if (!allowed.includes(subject))
+                return msg.reply(`Use syntax: !quiz [${allowed.join('|')}]`);
 
             try {
                 const q = await fetchQuiz(subject);
-
-                const question = cleanHTML(q.question);
-                const section = cleanHTML(q.section);
-                const solution = cleanHTML(q.solution);
-
-                if (q.image && q.image.trim() !== "") {
-                    try {
-                        await sock.sendMessage(msg.from, {
-                            image: { url: q.image }
-                        });
-                    } catch (err) {
-                        console.error("Quiz Image Error:", err);
-                    }
-                }
+                if (!q?.question) return msg.reply("❌ Remote question profile data parsing exception.");
 
                 activeQuiz[msg.from] = {
-                    answer: (q.answer || "").toUpperCase(),
-                    solution,
-                    question,
-                    subject,
-                    answered: false
+                    answer: (q.answer || "").toUpperCase().trim(),
+                    solution: q.solution || ""
                 };
 
-                let text = `🧠 FLEXI QUIZ\n\n📚 Subject: ${subject}\n`;
+                return msg.reply(
+`🧠 *FLEXI COMPILATION ENGINE*
 
-                text += `📝 Exam: ${q.examtype || "N/A"} ${q.examyear || ""}\n\n`;
+${cleanHTML(q.question)}
 
-                if (section) text += `${section}\n\n`;
+A. ${q.option?.a || 'N/A'}
+B. ${q.option?.b || 'N/A'}
+C. ${q.option?.c || 'N/A'}
+D. ${q.option?.d || 'N/A'}
 
-                text += `${question}\n\n`;
-
-                text += `A. ${q.option.a || ""}\n`;
-                text += `B. ${q.option.b || ""}\n`;
-                text += `C. ${q.option.c || ""}\n`;
-                text += `D. ${q.option.d || ""}\n\n`;
-
-                text += `Reply with A, B, C, or D.`;
-
-                await msg.reply(text);
-
-            } catch (err) {
-                console.error(err);
-                await msg.reply("❌ Failed to fetch quiz question.");
+👉 *Reply:* \`!answer A/B/C/D\``
+                );
+            } catch {
+                return msg.reply("❌ Failed to resolve network challenge request.");
             }
-            break;
         }
-        
-        /**
-         * =====================
-         * HANDLE USER ANSWERS
-         * =====================
-         */
+
         case "answer": {
+            if (!isGroup) return msg.reply("❌ Score processing requires explicit group context.");
+
             const quiz = activeQuiz[msg.from];
-            if (!quiz) {
-                return msg.reply("⚠️ No active quiz. Start one with !quiz [subject]");
+            if (!quiz) return msg.reply("⚠️ No historical quiz matches currently operational.");
+
+            const ans = (args[0] || "").toUpperCase().trim();
+            if (!["A", "B", "C", "D"].includes(ans))
+                return msg.reply("❌ Invalid format selection constraint applied.");
+
+            const senderJid = getSender(msg);
+            if (!senderJid) return msg.reply("❌ User resolution execution tracking dropped.");
+            
+            const user = getPhoneNumber(senderJid);
+            const correctAnswer = quiz.answer;
+            
+            delete activeQuiz[msg.from]; // Atomically delete key to secure racing inputs
+
+            if (ans === correctAnswer) {
+                scores[user] = (scores[user] || 0) + 1;
+                await saveScores();
+                return msg.reply(`🎉 Correct! +1 user ranking score point.`);
             }
 
-            const answer = args[0]?.toUpperCase();
-
-            if (!["A", "B", "C", "D"].includes(answer)) {
-                return msg.reply("❌ Invalid answer. Reply with A, B, C, or D.");
-            }
-
-            const userPhone = getPhoneNumber(msg.author || msg.from);
-
-            if (answer === quiz.answer) {
-                scores[userPhone] = (scores[userPhone] || 0) + 1;
-                saveScores();
-
-                await msg.reply(
-                    `🎉 Correct!\n+1 Point\nTotal Score: ${scores[userPhone]}`
-                );
-            } else {
-                await msg.reply(
-                    `❌ Wrong!\nCorrect: ${quiz.answer}\nSolution: ${quiz.solution}`
-                );
-            }
-
-            quiz.answered = true;
-            delete activeQuiz[msg.from];
-            break;
+            return msg.reply(`❌ Incorrect option parsed.\nCorrect Alternative: ${correctAnswer}\nManual: ${cleanHTML(quiz.solution)}`);
         }
 
-        /**
-         * =====================
-         * SCORE
-         * =====================
-         */
         case "score": {
-            const userPhone = getPhoneNumber(msg.author || msg.from);
-            const total = scores[userPhone] || 0;
-
-            await msg.reply(`🏆 Your Score: ${total}`);
-            break;
+            const user = getPhoneNumber(getSender(msg));
+            return msg.reply(`🏆 Your Current Accumulated Score Balance: ${scores[user] || 0}`);
         }
 
-        /**
-         * =====================
-         * LEADERBOARD
-         * =====================
-         */
         case "leaderboard": {
-            const sorted = Object.entries(scores)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 10);
+            const top = Object.entries(scores).sort((a, b) => b[1] - a[1]).slice(0, 10);
+            if (!top.length) return msg.reply("No scores found within execution storage profiles.");
 
-            if (!sorted.length) {
-                return msg.reply("No scores yet.");
-            }
-
-            let board = "🏆 *GLOBAL LEADERBOARD*\n\n";
+            let text = "🏆 *GLOBAL LEADERBOARD METRICS*\n\n";
             const mentions = [];
 
-            for (let i = 0; i < sorted.length; i++) {
-                const phone = sorted[i][0];
-                const score = sorted[i][1];
-
-                const cleanPhone = phone.replace("+", "");
-                const jid = `${cleanPhone}@s.whatsapp.net`;
-
+            for (let i = 0; i < top.length; i++) {
+                const phone = top[i][0].replace("+", "");
+                const jid = `${phone}@s.whatsapp.net`;
                 mentions.push(jid);
-
-                board += `${i + 1}. @${cleanPhone}\n`;
-                board += `⭐ ${score} points\n\n`;
+                text += `${i + 1}. @${phone} - *${top[i][1]} points*\n`;
             }
 
-            await sock.sendMessage(msg.from, {
-                text: board,
-                mentions
-            });
-
-            break;
+            return sock.sendMessage(msg.from, { text, mentions });
         }
-        
-        /**
-         * =====================
-         * GROUP COMMANDS GATEWAY
-         * =====================
-         */
-        default:
-            if (!isGroup) return msg.reply("❌ This command works only in groups.");
 
-            switch (command.toLowerCase()) {
+        /* ========== SYSTEM ADMINISTRATION ACTIONS ========== */
+        case "kick":
+        case "add":
+        case "promote":
+        case "demote": {
+            if (!isGroup) return msg.reply("❌ Operational gateway limited strictly to group origins.");
 
-                /**
-                 * =====================
-                 * KICK
-                 * =====================
-                 */
-                case "kick": {
-                    try {
-                        const metadata = await sock.groupMetadata(msg.from);
+            const perm = await getPermissions(sock, msg);
+            if (!perm?.isAdmin) return msg.reply("❌ Administrative policy exception: Access Denied.");
+            if (!perm?.botAdmin) return msg.reply("❌ Privilege Error: Upgrade bot account profile status to administrator.");
 
-                        const sender =
-                            msg.author ||
-                            msg.key?.participant ||
-                            msg.participant;
+            if (command === "add") {
+                if (!args[0]) return msg.reply("Usage: !add 234xxxxxxxxxx");
+                const target = args[0].replace(/[^\d]/g, "") + "@s.whatsapp.net";
 
-                        const senderData = metadata.participants.find(
-                            p => p.id === sender
-                        );
-
-                        const botData = metadata.participants.find(
-                            p => p.id === sock.user.id
-                        );
-
-                        const isAdmin = senderData?.admin;
-                        const botAdmin = botData?.admin;
-
-                        if (!isAdmin) {
-                            return await msg.reply("❌ Only group admins can use this command.");
-                        }
-
-                        if (!botAdmin) {
-                            return await msg.reply("❌ I must be an admin to remove members.");
-                        }
-
-                        const target =
-                            msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] ||
-                            msg.message?.extendedTextMessage?.contextInfo?.participant;
-
-                        if (!target) {
-                            return await msg.reply("❌ Tag or reply to a user to kick.");
-                        }
-
-                        if (target === sender) {
-                            return await msg.reply("❌ You cannot kick yourself.");
-                        }
-
-                        await sock.groupParticipantsUpdate(
-                            msg.from,
-                            [target],
-                            "remove"
-                        );
-
-                        await sock.sendMessage(msg.from, {
-                            text: `✅ Removed @${target.split("@")[0]}`,
-                            mentions: [target]
-                        });
-
-                    } catch (err) {
-                        console.error("[KICK ERROR]", err);
-                        await msg.reply("❌ Failed to remove user.");
-                    }
-                    break;
+                try {
+                    await sock.groupParticipantsUpdate(msg.from, [target], "add");
+                    metadataCache.delete(msg.from); // Evict stale metadata records instantly
+                    return sock.sendMessage(msg.from, {
+                        text: `✅ Added member tracking: @${target.split("@")[0]}`,
+                        mentions: [target]
+                    });
+                } catch {
+                    return msg.reply("❌ Protocol failed to directly pull the destination user registry.");
                 }
-
-                /**
-                 * =====================
-                 * GROUP INFO
-                 * =====================
-                 */
-                case "ginfo": {
-                    const metadata = await sock.groupMetadata(msg.from);
-                    const ownerPhone = metadata.owner
-                        ? getPhoneNumber(metadata.owner)
-                        : "N/A";
-
-                    await msg.reply(
-                        `*📊 GROUP INFO*\n\n` +
-                        `Name: ${metadata.subject}\n` +
-                        `Members: ${metadata.participants.length}\n` +
-                        `Owner: ${ownerPhone}\n` +
-                        `ID: ${msg.from}`
-                    );
-                    break;
-                }
-
-                /**
-                 * =====================
-                 * LIST ONLINE
-                 * =====================
-                 */
-                case "listonline": {
-                    if (!isGroup) return msg.reply("❌ This command works only in groups.");
-
-                    try {
-                        const metadata = await sock.groupMetadata(msg.from);
-                        const participants = metadata.participants.map(p => p.id);
-
-                        const onlineActive = [];
-                        const onlineInactive = [];
-                        const offline = [];
-
-                        for (const jid of participants) {
-                            const presence = presenceStore?.[msg.from]?.[jid];
-                            const isOnline =
-                                presence && presence.lastKnownPresence !== "unavailable";
-
-                            const lastActivity =
-                                userActivity?.[msg.from]?.[jid]?.lastMessageTime || 0;
-
-                            const activeAfterLatest =
-                                (Date.now() - lastActivity) < 300000;
-
-                            if (isOnline) {
-                                activeAfterLatest
-                                    ? onlineActive.push(jid)
-                                    : onlineInactive.push(jid);
-                            } else {
-                                offline.push(jid);
-                            }
-                        }
-
-                        let report = `📊 *GROUP ACTIVITY REPORT*\n\n`;
-
-                        const buildSection = (title, list) => {
-                            let section = `${title} (${list.length})\n`;
-
-                            if (list.length === 0) return section + "None\n\n";
-
-                            section += list
-                                .map(j => `• @${j.split("@")[0]}`)
-                                .join("\n") + "\n\n";
-
-                            return section;
-                        };
-
-                        report += buildSection("🟢 ONLINE & ACTIVE", onlineActive);
-                        report += buildSection("🟡 ONLINE BUT INACTIVE", onlineInactive);
-
-                        report += `👥 Total Members: ${participants.length}\n`;
-                        report += `📈 Engagement: ${
-                            participants.length > 0
-                                ? ((onlineActive.length / participants.length) * 100).toFixed(1)
-                                : 0
-                        }%`;
-
-                        await sock.sendMessage(msg.from, {
-                            text: report
-                        });
-
-                    } catch (err) {
-                        console.error("LISTONLINE ERROR:", err);
-                        await msg.reply("❌ Failed to generate activity report.");
-                    }
-
-                    break;
-                }
-
-                /**
-                 * =====================
-                 * GROUP ID
-                 * =====================
-                 */
-                case "gid": {
-                    await msg.reply(`*🆔 Group ID:*\n${msg.from}`);
-                    break;
-                }
-
-                /**
-                 * =====================
-                 * PROMOTE
-                 * =====================
-                 */
-                case "promote": {
-                    const target = extractJid(msg);
-                    if (!target) return msg.reply("Usage: !promote @user or reply");
-
-                    try {
-                        await sock.groupParticipantsUpdate(
-                            msg.from,
-                            [target],
-                            "promote"
-                        );
-
-                        await msg.reply("✅ User promoted to admin.");
-                    } catch (err) {
-                        await msg.reply("❌ Failed to promote user.");
-                    }
-                    break;
-                }
-
-                /**
-                 * =====================
-                 * DEMOTE
-                 * =====================
-                 */
-                case "demote": {
-                    const target = extractJid(msg);
-                    if (!target) return msg.reply("Usage: !demote @user or reply");
-
-                    try {
-                        await sock.groupParticipantsUpdate(
-                            msg.from,
-                            [target],
-                            "demote"
-                        );
-
-                        await msg.reply("✅ Admin privileges revoked.");
-                    } catch (err) {
-                        await msg.reply("❌ Failed to demote user.");
-                    }
-                    break;
-                }
-
-                /**
-                 * =====================
-                 * ADD MEMBER
-                 * =====================
-                 */
-                case "add": {
-                    if (!args[0]) {
-                        return msg.reply("Usage: !add 234xxxxxxxxxx");
-                    }
-
-                    try {
-                        const target =
-                            args[0].replace(/[^0-9]/g, "") +
-                            "@s.whatsapp.net";
-
-                        const result = await sock.groupParticipantsUpdate(
-                            msg.from,
-                            [target],
-                            "add"
-                        );
-
-                        const status = result?.[0]?.status;
-
-                        if (status === 200 || status === "200") {
-                            await sock.sendMessage(msg.from, {
-                                text: `✅ Added @${target.split("@")[0]}`,
-                                mentions: [target]
-                            });
-                        } else {
-                            await msg.reply(`⚠️ WhatsApp returned: ${status}`);
-                        }
-                    } catch (err) {
-                        await msg.reply(`❌ Failed to add user: ${err.message}`);
-                    }
-                    break;
-                }
-
-                /**
-                 * =====================
-                 * MUTE / UNMUTE
-                 * =====================
-                 */
-                case "mute":
-                case "unmute": {
-                    const isLock = command === "mute";
-
-                    await sock.groupSettingUpdate(
-                        msg.from,
-                        isLock ? "announcement" : "not_announcement"
-                    );
-
-                    await msg.reply(
-                        `🔒 Group ${isLock ? "locked" : "unlocked"}.`
-                    );
-
-                    if (args[0]) {
-                        const duration = parseDuration(args[0]);
-
-                        if (duration) {
-                            setTimeout(async () => {
-                                await sock.groupSettingUpdate(
-                                    msg.from,
-                                    isLock ? "not_announcement" : "announcement"
-                                );
-
-                                await sock.sendMessage(msg.from, {
-                                    text: `⏰ Timed ${isLock ? "lock" : "unlock"} expired.`
-                                });
-                            }, duration);
-                        }
-                    }
-
-                    break;
-                }
-
-                default:
-                    await msg.reply("❓ Unknown command. Type !menu");
             }
-            break;
+
+            const target = extractJid(msg);
+            if (!target) return msg.reply("❌ Validation missing target context target tracking vectors.");
+
+            try {
+                await sock.groupParticipantsUpdate(
+                    msg.from,
+                    [target],
+                    command === "kick" ? "remove" : command
+                );
+                metadataCache.delete(msg.from); // Evict cache after mutations
+
+                return sock.sendMessage(msg.from, {
+                    text: `✅ Administrative command [${command}] applied cleanly on @${target.split("@")[0]}`,
+                    mentions: [target]
+                });
+            } catch {
+                return msg.reply("❌ System configuration block or privilege level structure context failure.");
+            }
+        }
+
+        case "ginfo": {
+            if (!isGroup) return msg.reply("❌ Context domain limited to group properties.");
+
+            const meta = await getGroupMetadataSafe(sock, msg.from);
+            if (!meta) return msg.reply("❌ Error resolving structural group payload characteristics.");
+
+            return msg.reply(`
+📊 *WORKSPACE COMPOSITION ARCHITECTURE*
+📝 Subject: ${meta.subject}
+👥 Total Registries: ${meta.participants?.length || 0} items
+🆔 Matrix Route ID: ${msg.from}
+`);
+        }
+
+        case "gid":
+            return msg.reply(isGroup ? msg.from : "❌ Context isolated outside active channels.");
+
+        case "mute":
+        case "unmute": {
+            if (!isGroup) return msg.reply("❌ Context limits operational scope metrics to channel elements.");
+
+            const perm = await getPermissions(sock, msg);
+            if (!perm?.isAdmin) return msg.reply("❌ Authorization block: Administrative actions locked.");
+            if (!perm?.botAdmin) return msg.reply("❌ Status update verification: Requires master level clearance parameters.");
+
+            const lock = command === "mute";
+            await sock.groupSettingUpdate(msg.from, lock ? "announcement" : "not_announcement");
+            return msg.reply(lock ? "🔒 Channel closed. Dispatch permissions mapped exclusively to staff." : "🔓 Channel operational parameters open to general telemetry input.");
+        }
+
+        case "listonline": {
+            if (!isGroup) return msg.reply("❌ Context engine isolated from local storage configurations.");
+
+            const meta = await getGroupMetadataSafe(sock, msg.from);
+            if (!meta) return msg.reply("❌ Configuration read pipeline terminated unexpectedly.");
+
+            const online = meta.participants.filter(p =>
+                presenceStore?.[msg.from]?.[p.id]?.lastKnownPresence !== "unavailable"
+            );
+
+            const jids = online.map(p => p.id);
+            let responseString = `🟢 *Online Target Capacity metrics:* ${online.length}/${meta.participants.length}\n\n`;
+            
+            if (jids.length > 0) {
+                responseString += jids.map(id => `• @${id.split("@")[0]}`).join("\n");
+            } else {
+                responseString += "_No data cached on recent presences inside network pipelines._";
+            }
+
+            return sock.sendMessage(msg.from, {
+                text: responseString,
+                mentions: jids
+            });
+        }
+
+        default:
+            return msg.reply("❓ Unknown functional instruction array parameter mapped.");
     }
 };
 
