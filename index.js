@@ -73,6 +73,17 @@ function normalize(text) {
     return t.startsWith("alexa react") && t.includes("online");
 };
 
+const isAlexaOnlineQuestion = (text) => {
+    const t = normalize(text);
+
+    return (
+        t.includes("alexa are you online") ||
+        t.includes("alexa are u online") ||
+        t.includes("alexa are you there") ||
+        t.includes("alexa are u there") ||
+        t.includes("alexa online")
+    );
+};
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
@@ -186,6 +197,28 @@ if (isAlexaReact(body)) {
             key: msg.key
         }
     });
+}
+
+// ==========================
+// ALEXA ONLINE CHECK
+// ==========================
+if (isAlexaOnlineQuestion(body)) {
+    const replies = [
+        "🤖 Yes, I'm online and ready to assist.",
+        "✅ I'm here and operating normally.",
+        "👋 Yes, I'm active and listening.",
+        "⚡ Online and ready for your commands.",
+        "🟢 Alexa is currently available."
+    ];
+
+    const reply =
+        replies[Math.floor(Math.random() * replies.length)];
+
+    await sock.sendMessage(from, {
+        text: reply
+    });
+
+    return;
 }
         
        if (from.endsWith("@g.us")) {
