@@ -68,6 +68,11 @@ function normalize(text) {
         .trim();
 }
 
+  const isAlexaReact = (text) => {
+    const t = normalize(text);
+    return t.startsWith("alexa react") && t.includes("online");
+};
+
 const isAlexaReact = (text) => {
     const t = normalize(text);
     return t.startsWith("alexa react") && t.includes("online");
