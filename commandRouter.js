@@ -3,12 +3,15 @@ const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 
-/* ==========================
-   IDENTITY HELPERS (SECURED)
-========================== */
+// Attach Global Runtime Safety Nets directly to block socket termination crashes
+process.on('uncaughtException', (err) => console.log('⚠️ System Error Guard:', err.message));
+process.on('unhandledRejection', (err) => console.log('⚠️ Rejection Guard:', err.message));
+
+/* =====================================================
+   IDENTITY HELPERS (STABILIZED & ISOLATED)
+===================================================== */
 
 function getSender(msg) {
-    // Strictly isolate author identification properties to avoid overlapping target scopes
     return (
         msg.author ||
         msg.key?.participant ||
@@ -21,9 +24,8 @@ function getSender(msg) {
 
 function getPhoneNumber(id) {
     if (!id) return "Unknown";
-    let num = id.split("@")[0];
-    if (num.startsWith("0")) num = "+234" + num.slice(1);
-    else if (!num.startsWith("+")) num = "+" + num;
+    let num = id.split("@")[0].replace(/[^\d]/g, "");
+    if (num.startsWith("0")) num = "234" + num.slice(1);
     return num;
 }
 
@@ -31,9 +33,9 @@ function getBotId(sock) {
     return sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
 }
 
-/* ==========================
-   SAFE GROUP METADATA WITH MEMORY CACHE
-========================== */
+/* =====================================================
+   SAFE GROUP METADATA WITH INSTANT CACHE EXPULSION
+===================================================== */
 
 const metadataCache = new Map();
 const CACHE_TTL = 30000;
@@ -55,9 +57,9 @@ async function getGroupMetadataSafe(sock, jid) {
     }
 }
 
-/* ==========================
+/* =====================================================
    QUIZ SYSTEM & ASYNC STORAGE
-========================== */
+===================================================== */
 
 const activeQuiz = {};
 const SCORE_FILE = path.join(__dirname, "scores.json");
@@ -78,7 +80,6 @@ if (fs.existsSync(SCORE_FILE)) {
 async function saveScores() {
     if (isSaving) return;
     isSaving = true;
-
     try {
         await fs.promises.writeFile(SCORE_FILE, JSON.stringify(scores, null, 2), "utf8");
     } catch (err) {
@@ -88,9 +89,9 @@ async function saveScores() {
     }
 }
 
-/* ==========================
-   UTILITIES & EXTRACTORS
-========================== */
+/* =====================================================
+   UTILITIES & ROBUST EXTRACTORS
+===================================================== */
 
 function cleanHTML(text) {
     if (!text) return "";
@@ -125,9 +126,9 @@ async function fetchQuiz(subject) {
     return res.data.data;
 }
 
-/* ==========================
-   PERMISSIONS RUNTIME CHECK
-========================== */
+/* =====================================================
+   PERMISSIONS RUNTIME ENGINE (JARVIS LEVEL SAFETY)
+===================================================== */
 
 async function getPermissions(sock, msg) {
     const isGroup = msg.from.endsWith("@g.us");
@@ -149,9 +150,9 @@ async function getPermissions(sock, msg) {
     };
 }
 
-/* ==========================
+/* =====================================================
    CENTRALIZED COMMAND ROUTER
-========================== */
+===================================================== */
 
 const routeCommand = async (command, args, msg, sock, botName, trackers = {}) => {
     const isGroup = msg.from.endsWith("@g.us");
@@ -210,7 +211,7 @@ const routeCommand = async (command, args, msg, sock, botName, trackers = {}) =>
                 );
                 return msg.reply(res.data.result || res.data.reply || "No response");
             } catch {
-                return msg.reply("❌ AI execution timeout or engine sleeping.");
+                return msg.reply("❌ AI execution timeout or service temporarily unavailable.");
             }
 
         /* ========== EDUCATIONAL GAMEPLAY ========== */
@@ -266,7 +267,7 @@ D. ${q.option?.d || 'N/A'}
             const user = getPhoneNumber(senderJid);
             const correctAnswer = quiz.answer;
             
-            delete activeQuiz[msg.from]; // Atomically delete key to secure racing inputs
+            delete activeQuiz[msg.from];
 
             if (ans === correctAnswer) {
                 scores[user] = (scores[user] || 0) + 1;
@@ -290,16 +291,16 @@ D. ${q.option?.d || 'N/A'}
             const mentions = [];
 
             for (let i = 0; i < top.length; i++) {
-                const phone = top[i][0].replace("+", "");
+                const phone = top[i][0].replace(/[^\d]/g, "");
                 const jid = `${phone}@s.whatsapp.net`;
                 mentions.push(jid);
-                text += `${i + 1}. @${phone} - *${top[i][1]} points*\n`;
+                text += `${i + 1}. @${phone} — *${top[i][1]} points*\n`;
             }
 
             return sock.sendMessage(msg.from, { text, mentions });
         }
 
-        /* ========== SYSTEM ADMINISTRATION ACTIONS ========== */
+        /* ========== HARDENED SYSTEM MANAGEMENT ACTIONS ========== */
         case "kick":
         case "add":
         case "promote":
@@ -310,24 +311,38 @@ D. ${q.option?.d || 'N/A'}
             if (!perm?.isAdmin) return msg.reply("❌ Administrative policy exception: Access Denied.");
             if (!perm?.botAdmin) return msg.reply("❌ Privilege Error: Upgrade bot account profile status to administrator.");
 
+            // Hardened Exception Handling block for user addition operations
             if (command === "add") {
-                if (!args[0]) return msg.reply("Usage: !add 234xxxxxxxxxx");
-                const target = args[0].replace(/[^\d]/g, "") + "@s.whatsapp.net";
+                if (!args.length) return msg.reply("Usage: !add 234xxxxxxxxxx");
+                
+                const rawInput = args.join("");
+                const cleanedDigits = rawInput.replace(/[^\d]/g, "");
+                if (cleanedDigits.length < 7) return msg.reply("❌ Invalid format payload length verified.");
+                
+                const target = cleanedDigits + "@s.whatsapp.net";
 
                 try {
                     await sock.groupParticipantsUpdate(msg.from, [target], "add");
-                    metadataCache.delete(msg.from); // Evict stale metadata records instantly
+                    metadataCache.delete(msg.from); 
                     return sock.sendMessage(msg.from, {
                         text: `✅ Added member tracking: @${target.split("@")[0]}`,
                         mentions: [target]
                     });
-                } catch {
-                    return msg.reply("❌ Protocol failed to directly pull the destination user registry.");
+                } catch (err) {
+                    console.error("❌ Add Command Failure handled gracefully:", err.message);
+                    
+                    // Fallback option: Try to send an invite link automatically if direct pull fails due to privacy profiles
+                    try {
+                        const code = await sock.groupInviteCode(msg.from);
+                        return msg.reply(`⚠️ User addition blocked due to privacy settings.\n\nInvite Link alternative sent:\nhttps://chat.whatsapp.com/${code}`);
+                    } catch {
+                        return msg.reply("❌ Could not pull member records or fetch fallback invite token link assets.");
+                    }
                 }
             }
 
             const target = extractJid(msg);
-            if (!target) return msg.reply("❌ Validation missing target context target tracking vectors.");
+            if (!target) return msg.reply("❌ Validation missing target context tracking vectors. Tag or reply to a valid user.");
 
             try {
                 await sock.groupParticipantsUpdate(
@@ -335,14 +350,15 @@ D. ${q.option?.d || 'N/A'}
                     [target],
                     command === "kick" ? "remove" : command
                 );
-                metadataCache.delete(msg.from); // Evict cache after mutations
+                metadataCache.delete(msg.from); 
 
                 return sock.sendMessage(msg.from, {
                     text: `✅ Administrative command [${command}] applied cleanly on @${target.split("@")[0]}`,
                     mentions: [target]
                 });
-            } catch {
-                return msg.reply("❌ System configuration block or privilege level structure context failure.");
+            } catch (err) {
+                console.error(`❌ Admin execution command [${command}] error fallback dropped:`, err.message);
+                return msg.reply("❌ Process dropped. User may have already left, or the bot lacks structural rank metrics.");
             }
         }
 
@@ -382,22 +398,29 @@ D. ${q.option?.d || 'N/A'}
             const meta = await getGroupMetadataSafe(sock, msg.from);
             if (!meta) return msg.reply("❌ Configuration read pipeline terminated unexpectedly.");
 
-            const online = meta.participants.filter(p =>
-                presenceStore?.[msg.from]?.[p.id]?.lastKnownPresence !== "unavailable"
-            );
+            const onlineParticipants = meta.participants.filter(p => {
+                const presence = presenceStore?.[msg.from]?.[p.id]?.lastKnownPresence;
+                return presence && presence !== "unavailable";
+            });
 
-            const jids = online.map(p => p.id);
-            let responseString = `🟢 *Online Target Capacity metrics:* ${online.length}/${meta.participants.length}\n\n`;
+            const jids = onlineParticipants.map(p => p.id);
+            
+            let responseString = `🌐 *SECTOR: 【 ${meta.subject.toUpperCase()} 】*\n`;
+            responseString += `👮 *ONLINE WORKERS:* ${onlineParticipants.length}\n`;
+            responseString += `👥 *TOTAL CAPACITY:* ${meta.participants.length}\n\n`;
             
             if (jids.length > 0) {
-                responseString += jids.map(id => `• @${id.split("@")[0]}`).join("\n");
+                responseString += jids.map((id, index) => {
+                    const cleanNumber = id.split("@")[0];
+                    return `${index + 1}. @${cleanNumber}`;
+                }).join("\n");
             } else {
-                responseString += "_No data cached on recent presences inside network pipelines._";
+                responseString += "_No active data streams cached inside network pipelines._";
             }
 
             return sock.sendMessage(msg.from, {
                 text: responseString,
-                mentions: jids
+                mentions: jids 
             });
         }
 
