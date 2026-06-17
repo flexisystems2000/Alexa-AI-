@@ -220,7 +220,7 @@ const routeCommand = async (command, args, msg, sock, botName, trackers = {}) =>
             if (activeQuiz[msg.from]) return msg.reply("⚠️ An active quiz execution is running in this workspace.");
 
             const subject = (args[0] || "").toLowerCase();
-            const allowed = ["english", "mathematics", "chemistry", "physics", "biology", "marketing"];
+            const allowed = ["english", "mathematics", "chemistry", "physics", "biology", "commerce"];
 
             if (!allowed.includes(subject))
                 return msg.reply(`Use syntax: !quiz [${allowed.join('|')}]`);
